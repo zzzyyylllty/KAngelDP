@@ -5,11 +5,8 @@ import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
-import taboolib.common5.Coerce
-import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.time.Clock
 
 /**
  * 地牢模板 - 定义地牢的静态配置信息
@@ -68,8 +65,8 @@ data class DungeonInstance(
     // 状态管理
     var state: DungeonState = DungeonState.PREPARING,
 
-    // meta
-    var meta: LinkedHashMap<String, Any> = LinkedHashMap(),
+    // 统计信息
+    var meta: DungeonMeta,
 
     var mobsKilled: Int = 0,
     var bossesKilled: Int = 0,
@@ -130,7 +127,7 @@ data class DungeonInstance(
      */
     fun playerDied(player: Player) {
         deadPlayers.add(player.uniqueId)
-        statistics.deaths++
+        meta.add()
     }
 
     /**
@@ -220,11 +217,11 @@ enum class DungeonState{
     COMPLETED
 }
 
-data class DungeonStatistics(
-    val statistics: LinkedHashMap<String, Double> = LinkedHashMap(),
+data class DungeonMeta(
+    val meta: LinkedHashMap<String, Double> = LinkedHashMap(),
 ) {
-    fun add(key: String, value: Number) {
-        if (statistics[key] == null) statistics[key] = value.toDouble()
-        else statistics[key]?.plus(value.toDouble())
+    fun add(key: String, value: Any) {
+        if (meta[key] == null) meta[key] = value.toDouble()
+        else meta[key]?.plus(value.toDouble())
     }
 }
