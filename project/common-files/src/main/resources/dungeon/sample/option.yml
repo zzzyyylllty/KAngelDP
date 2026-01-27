@@ -1,0 +1,40 @@
+name: "Sample Dungeon"
+gameplay:
+  general:
+    Leave-on-death: false
+    adventure-mode: true
+    MinPlayers: 1
+    MaxPlayers: 5
+    keep-inventory:
+      enabled: true
+      required-lives: false
+    banned-items:
+      - ENDER_PEARL
+  commands:
+    mode: BLACKLIST
+    list:
+      - tpa
+  sequence:
+    timer:
+      mode: COUNTDOWN
+      start: 600
+vanilla-options:
+  hungry: true
+  HealthRegain:
+    food: false
+    saturation: false
+    potions: false
+    other: false
+  durability: true
+  items-drop: true
+  items-pickup: true
+agent:
+  onStart:
+    js:
+      Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Started."))
+  onComplete:
+    js:
+      Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Completed."))
+  onFail:
+    js:
+      Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Failed."))

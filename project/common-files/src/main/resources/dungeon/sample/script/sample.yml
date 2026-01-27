@@ -1,0 +1,7 @@
+sample:
+  onRun:
+    js: |-
+      instance.sendMessageToAllPlayers("<yellow>Hello World!")
+  onPost:
+    js: |-
+      instance.sendMessageToAllPlayers("<green>Hello World Running Completed.")
