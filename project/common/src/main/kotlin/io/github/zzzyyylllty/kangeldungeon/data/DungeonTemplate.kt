@@ -236,7 +236,7 @@ enum class DungeonState{
  * mob.kill.<mob> 生物击杀
  */
 data class DungeonMeta(
-    val meta: LinkedHashMap<String, Any?> = LinkedHashMap(),
+    val meta: ConcurrentHashMap<String, Any?>,
 ) {
     fun add(key: String, value: Any?) {
         if (meta[key] == null) meta[key] = value

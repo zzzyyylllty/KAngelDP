@@ -4,6 +4,7 @@ import com.sk89q.worldedit.function.operation.Operations
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.dataFolder
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonInstance
+import io.github.zzzyyylllty.kangeldungeon.data.DungeonMeta
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonState
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonTemplate
 import io.github.zzzyyylllty.kangeldungeon.logger.infoL
@@ -23,6 +24,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /*
 plugins/KAngelDP/sources/sample/
@@ -432,6 +434,13 @@ object DungeonHelper {
             devLog("Dungeon world creation is null, skipped")
             return
         }
+        val finalMeta = meta.toMutableMap()
+
+        finalMeta["name"] = template.name
+        finalMeta["template"] = template
+
+        val dungeonMeta = DungeonMeta(ConcurrentHashMap(finalMeta))
+
         val instance = DungeonInstance(
             templateName = templateName,
             uuid = uuid,
@@ -441,10 +450,10 @@ object DungeonHelper {
             startedAt = null,
             completedAt = null,
             state = DungeonState.PREPARING,
-            meta = finalMeta,
+            meta = dungeonMeta,
             spawnLocation = template.spawnVector.toLocation(world)
         )
         KAngelDungeon.dungeonInstances[uuid] = instance
+        devLog("Dungeon created: $instance")
     }
-}
 }
