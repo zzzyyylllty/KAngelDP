@@ -1,13 +1,9 @@
 package io.github.zzzyyylllty.kangeldungeon
 
+import io.github.zzzyyylllty.kangeldungeon.data.DungeonInstance
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonTemplate
-import io.github.zzzyyylllty.kangeldungeon.data.LevelTemplate
-import io.github.zzzyyylllty.kangeldungeon.data.Regen
-import io.github.zzzyyylllty.kangeldungeon.data.RegenBlock
-import io.github.zzzyyylllty.kangeldungeon.data.RegenTemplate
 import io.github.zzzyyylllty.kangeldungeon.data.load.loadLevelFiles
 import io.github.zzzyyylllty.kangeldungeon.data.load.loadRegenFiles
-import io.github.zzzyyylllty.kangeldungeon.listener.releaseRegenBlocks
 import io.github.zzzyyylllty.kangeldungeon.logger.*
 import io.github.zzzyyylllty.kangeldungeon.util.KAngelDungeonLocalDependencyHelper
 import io.github.zzzyyylllty.kangeldungeon.util.dependencies
@@ -55,8 +51,8 @@ object KAngelDungeon : Plugin() {
 
     val dateTimeFormatter: DateTimeFormatter by lazy { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss") }
     var devMode = true
-    val ketherScriptCache by lazy { LinkedHashMap<String, KetherShell.Cache?>() }
-    val jsScriptCache by lazy { LinkedHashMap<String, CompiledScript?>() }
+    val ketherScriptCache by lazy { ConcurrentHashMap<String, KetherShell.Cache>() }
+    val jsScriptCache by lazy { ConcurrentHashMap<String, CompiledScript>() }
 
 
 
@@ -90,18 +86,13 @@ object KAngelDungeon : Plugin() {
     fun reloadCustomConfig(async: Boolean = true) {
         submit(async) {
 
-            releaseRegenBlocks()
-
             config.reload()
             devMode = config.getBoolean("debug",false)
 
             ketherScriptCache.clear()
             jsScriptCache.clear()
 
-            blockRegenMap.clear()
-            regenTemplates.clear()
-            regenTemplatesByBlock.clear()
-            levels.clear()
+            dungeonTemplates.clear()
 
             loadRegenFiles()
             loadLevelFiles()
@@ -114,7 +105,7 @@ object KAngelDungeon : Plugin() {
     }
 
 
-    fun solveDependencies(dependencies: List<String>, useTaboo: Boolean = false) {
+    fun solveDependencies(dependencies: List<String>, useTaboo: Boolean = true) {
         infoS("Starting loading dependencies...")
         for (name in dependencies) {
             try {

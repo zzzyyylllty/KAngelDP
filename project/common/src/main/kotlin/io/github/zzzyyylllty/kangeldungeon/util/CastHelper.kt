@@ -29,7 +29,9 @@ object CastHelper {
             else -> input // 默认为 String
         }
     }
-    fun increaseAny(first: Any, second: Any): Any? {
+    fun increaseAny(first: Any?, second: Any?): Any? {
+        if (first == null) return second
+        if (second == null) return first
         return if (first is Int) {
             first.plus(second.toString().toInt())
         } else if (first is Double) {

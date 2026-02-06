@@ -130,7 +130,8 @@ allprojects {
 //        taboo("io.github.zzzyyylllty:EmbianComponent:1.0.2")
 //        compileOnly("com.willfp:eco:6.77.2")
 
-        taboo("io.github.zzzyyylllty:EmbianComponent:1.0.2")
+        compileOnly("com.sk89q.worldedit:worldedit-bukkit:7.2.13")
+        taboo("com.github.zzzyyylllty:EmbianComponent:1.0.3")
         implementation("com.sk89q.worldguard:worldguard-bukkit:7.0.10-SNAPSHOT")
         implementation("com.sk89q.worldguard:worldguard-core:7.0.10-SNAPSHOT")
 

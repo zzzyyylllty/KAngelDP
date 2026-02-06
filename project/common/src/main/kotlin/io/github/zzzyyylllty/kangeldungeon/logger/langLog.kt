@@ -12,13 +12,13 @@ val prefix = "[<gradient:#ffaa66:#8884ff>KAngelDungeon</gradient>]"
 
 
 fun infoL(node: String,vararg args: Any) {
-    consoleSender.infoS(console.asLangText(node,args))
+    consoleSender.infoS(console.asLangText(node,*args))
 }
 fun severeL(node: String,vararg args: Any) {
-    consoleSender.severeS(console.asLangText(node,args))
+    consoleSender.severeS(console.asLangText(node,*args))
 }
 fun warningL(node: String,vararg args: Any) {
-    consoleSender.warningS(console.asLangText(node,args))
+    consoleSender.warningS(console.asLangText(node,*args))
 }
 
 fun CommandSender?.fineS(message: String, bothSendConsole: Boolean = false) {

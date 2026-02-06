@@ -4,7 +4,6 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import io.github.zzzyyylllty.kangeldungeon.logger.*
-import io.github.zzzyyylllty.kangeldungeon.util.isClassExistsSafety
 import org.tabooproject.reflex.ReflexClass
 import taboolib.common.PrimitiveIO
 import taboolib.common.PrimitiveSettings

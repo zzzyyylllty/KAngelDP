@@ -1,10 +1,12 @@
 package io.github.zzzyyylllty.kangeldungeon.data
 
-import io.github.zzzyyylllty.kangeldungeon.util.DungeonHelper
+import io.github.zzzyyylllty.kangeldungeon.util.CastHelper
+import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
 import org.bukkit.entity.Player
+import org.bukkit.util.Vector
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -17,14 +19,9 @@ data class DungeonTemplate(
     val description: List<String> = emptyList(),
 
     // 地图配置
-    val schematicFile: String? = null, // Schematic文件路径
+    val schematicFile: String? = null, // Schematic文件
     val worldTemplate: String? = null, // 世界模板文件夹名
     val spawnPoint: Location, // 出生点（相对坐标）
-
-    // 玩家限制
-    val minPlayers: Int = 1,
-    val maxPlayers: Int = 5,
-    val requiredLevel: Int = 0,
 
     // 时间限制
     val timeLimit: Double? = 3600.0, // 秒
@@ -39,14 +36,26 @@ data class DungeonTemplate(
     // 权限要求
     val requiredPermission: String? = null,
 
-    // 冷却时间（秒）
-    val cooldown: Long = 0
+    // 位置信息
+    val spawnVector: Vector
 ) {
 
 }
 
 /**
  * 地牢实例 - 运行中的地牢副本
+ * @param templateName 地牢模板名称
+ * @param uuid 地牢的UUID
+ * @param players 地牢玩家
+ * @param deadPlayers 地牢死亡玩家
+ * @param leaderUUID 地牢小队领导者
+ * @param createdAt 创建时间
+ * @param startedAt 开始时间
+ * @param completedAt 完成时间
+ * @param state 地牢状态
+ * @param meta 地牢元数据
+ * @param spawnLocation 地牢出生点
+ * @param exitLocation 地牢退出位置
  */
 data class DungeonInstance(
     val templateName: String,
@@ -68,12 +77,8 @@ data class DungeonInstance(
     // 统计信息
     var meta: DungeonMeta,
 
-    var mobsKilled: Int = 0,
-    var bossesKilled: Int = 0,
-
     // 位置信息
-    val spawnLocation: Location,
-    val exitLocation: Location? = null,
+    val spawnLocation: Location
 ) {
 
     /**
@@ -94,7 +99,7 @@ data class DungeonInstance(
     fun getWorld(): World? = Bukkit.getWorld(DungeonHelper.getWorldName(templateName, uuid))
 
     /**
-     * 获取在线玩家列表
+     * 获取在线地牢玩家列表
      */
     fun getOnlinePlayers(): List<Player> {
         return players.mapNotNull { Bukkit.getPlayer(it) }
@@ -127,7 +132,8 @@ data class DungeonInstance(
      */
     fun playerDied(player: Player) {
         deadPlayers.add(player.uniqueId)
-        meta.add()
+        meta.add("player.dead", 1)
+        meta.add("player.dead.${player.name}", 1)
     }
 
     /**
@@ -159,17 +165,18 @@ data class DungeonInstance(
 
     /**
      * 获取剩余时间（秒）
+     * null代表没有时间限制
      */
-    fun getRemainingTime(template: DungeonTemplate): Double {
+    fun getRemainingTime(template: DungeonTemplate): Double? {
         val elapsed = getElapsedTime()
-        return (template.timeLimit - elapsed).coerceAtLeast(0.0)
+        return (template.timeLimit?.minus(elapsed))?.coerceAtLeast(0.0)
     }
 
     /**
      * 是否超时
      */
     fun isTimedOut(template: DungeonTemplate): Boolean {
-        return getElapsedTime() >= template.timeLimit
+        return template.timeLimit?.let { getElapsedTime() >= it } ?: false
     }
 
     /**
@@ -183,30 +190,32 @@ data class DungeonInstance(
      * 增加击杀数
      */
     fun incrementMobKills() {
-        mobsKilled++
-        statistics.mobsKilled++
+        meta.add("mob.kill", 1)
+    }
+
+    /**
+     * 增加特定怪击杀数
+     */
+    fun incrementMobKills(mobName: String) {
+        meta.add("mob.kill", 1)
+        meta.add("mob.kill.${mobName}", 1)
     }
 
     /**
      * 增加Boss击杀数
+     * 不会同步增加怪物击杀数
      */
     fun incrementBossKills() {
-        bossesKilled++
-        statistics.bossesKilled++
+        meta.add("boss.kill", 1)
     }
 
     /**
-     * 更新目标进度
+     * 增加特定Boss击杀数
+     * 不会同步增加怪物击杀数
      */
-    fun updateObjective(objectiveId: String, progress: Int, required: Int) {
-        objectives[objectiveId] = ObjectiveProgress(progress, required)
-    }
-
-    /**
-     * 检查是否完成所有目标
-     */
-    fun areAllObjectivesCompleted(): Boolean {
-        return objectives.values.all { it.isCompleted() }
+    fun incrementBossKills(mobName: String) {
+        meta.add("boss.kill", 1)
+        meta.add("boss.kill.${mobName}", 1)
     }
 }
 
@@ -217,11 +226,38 @@ enum class DungeonState{
     COMPLETED
 }
 
+/**
+ * 地牢统计信息及元数据
+ * player.dead 所有玩家死亡次数
+ * player.dead.<玩家名称> 特定玩家死亡次数
+ * boss.kill BOSS击杀数
+ * boss.kill.<BOSS名称> BOSS击杀数
+ * mob.kill 生物击杀
+ * mob.kill.<mob> 生物击杀
+ */
 data class DungeonMeta(
-    val meta: LinkedHashMap<String, Double> = LinkedHashMap(),
+    val meta: LinkedHashMap<String, Any?> = LinkedHashMap(),
 ) {
-    fun add(key: String, value: Any) {
-        if (meta[key] == null) meta[key] = value.toDouble()
-        else meta[key]?.plus(value.toDouble())
+    fun add(key: String, value: Any?) {
+        if (meta[key] == null) meta[key] = value
+        else meta[key] = CastHelper.increaseAny(meta[key], value)
+    }
+    fun set(key: String, value: Any?) {
+        meta[key] = value
+    }
+    fun get(key: String): Any? {
+        return meta[key]
+    }
+    fun getAsDouble(key: String): Double? {
+        return meta[key]?.toString()?.toDouble()
+    }
+    fun getAsInt(key: String): Int? {
+        return meta[key]?.toString()?.toInt()
+    }
+    fun getAsLong(key: String): Long? {
+        return meta[key]?.toString()?.toLong()
+    }
+    fun getAsString(key: String): String? {
+        return meta[key].toString()
     }
 }

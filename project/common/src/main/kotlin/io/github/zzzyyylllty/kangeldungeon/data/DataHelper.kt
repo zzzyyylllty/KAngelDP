@@ -1,6 +1,5 @@
 package io.github.zzzyyylllty.kangeldungeon.data
 
-import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.levels
 import io.github.zzzyyylllty.kangeldungeon.util.CastHelper
 import io.github.zzzyyylllty.kangeldungeon.util.toBooleanTolerance
 import org.bukkit.entity.Player
@@ -31,7 +30,6 @@ object DataHelper {
         submitAsync {
             player.setupDataContainer()
             DataUtil.cleanupCooldown(player)
-            DataUtil.initProfile(player)
         }
     }
 
@@ -216,13 +214,4 @@ object DataUtil {
             if ((container["cooldown.${it.key}"]?.toLongOrNull() ?: 0L) <= Instant.now().toEpochMilli()) container.delete(it.key)
         }
     }
-
-    fun initProfile(player: Player) {
-        val container = player.getDataContainer()
-        for (level in levels.values) {
-            if (container["level.${level.id}"] == null) PlayerDataManager(container, player).resetLevel(level.id)
-            if (container["exp.${level.id}"] == null) container["exp.${level.id}"] = 0
-        }
-    }
-
 }
