@@ -1,12 +1,9 @@
 [
   {
     "value": "com.google.code.gson:gson:$gsonVersion",
-    "test": [
-      "com.google.gson.Gson"
-    ],
     "relocate": [
       "com.google.gson",
-      "io.github.zzzyyylllty.kangeldungeon.library.gson"
+      "io.github.zzzyyylllty.kangeldungeon.dep.gson"
     ],
     "transitive": true,
     "ignoreOptional": false,

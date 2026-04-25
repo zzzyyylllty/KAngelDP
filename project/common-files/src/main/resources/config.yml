@@ -5,8 +5,6 @@
 # MOST SETTINGS REQUIRED RESTART TO APPLY CHANGES
 # 大部分设置需要重启以应用更改
 # MOST SETTINGS REQUIRED RESTART TO APPLY CHANGES
-# 大部分设置需要重启以应用更改
-# MOST SETTINGS REQUIRED RESTART TO APPLY CHANGES
 
 # 调试模式 debug
 # Debug mode
@@ -15,12 +13,6 @@ debug: false
 # 语言 language
 lang: en_US
 
-options:
-  level:
-    # 每次更新最多升级多少级，此选项可以有效避免经验配置错误带来的更新卡死
-    update-limit: 10
-    # 替换原版等级 null为不替换
-    override-vanilla: main
 
 
 database:

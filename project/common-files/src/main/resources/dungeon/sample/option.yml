@@ -1,14 +1,30 @@
-name: "Sample Dungeon"
+display:
+  name: "Sample Dungeon"
+  icon:
+    material: DIAMOND_SWORD # Support like craftengine:default:topaz
+    parameters:
+      item_model: "minecraft:iron_sword"
+  description: |-
+    Hello world
+map:
+  type: MAP # MAP, SCHEMATIC
+  source: testmap
+meta:
+  global:
+    samplemeta: 1
+  player:
+    samplemeta: 1
 gameplay:
   general:
-    Leave-on-death: false
-    adventure-mode: true
+    LeaveOnDeath: false
+    adventureMode: true
     MinPlayers: 1
     MaxPlayers: 5
+    allowParty: true
     keep-inventory:
       enabled: true
       required-lives: false
-    banned-items:
+    bannedItems:
       - ENDER_PEARL
   commands:
     mode: BLACKLIST
@@ -29,12 +45,20 @@ vanilla-options:
   items-drop: true
   items-pickup: true
 agent:
-  onStart:
-    js:
-      Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Started."))
-  onComplete:
-    js:
-      Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Completed."))
-  onFail:
-    js:
-      Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Failed."))
+  onCheck: |-
+    player.health >= 10
+  onCheckFail: |-
+    player.sendMessage(mmUtil.deserialize("<gray>Your health is < 10, dungeon sequence cancelled."))
+  onStart: |-
+    Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Started."));
+    instance.sendActionBarToAllPlayers("<gold>Prepare for battle!</gold>");
+    instance.setWorldTime(1000);
+    instance.setWorldStorm(false)
+  onComplete: |-
+    Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Completed."));
+    instance.healAllPlayers();
+    instance.executeCommand("say Congratulations!");
+    instance.clearAllPlayersEffects()
+  onFail: |-
+    Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Failed."));
+    instance.respawnAllDeadPlayers()

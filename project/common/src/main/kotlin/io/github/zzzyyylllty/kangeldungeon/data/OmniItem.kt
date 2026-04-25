@@ -20,14 +20,12 @@ val componentHelper by lazy { if (VersionHelper().isOrAbove12005()) EmbianCompon
 data class OmniItem(
     val source: String,
     val item: String,
-    val parameters: LinkedHashMap<String, Any?>? = null,
-    val components: LinkedHashMap<String, Any?>? = null,
+    val parameters: Map<String, Any?>? = null,
+    val components: Map<String, Any?>? = null,
 ) {
     fun build(player: Player?, overrideAmount: Int? = null): ItemStack {
 
-        val amount = overrideAmount
-
-//        val split = (if (namespaceID.contains("{")) namespaceID.parseKether(player, defaultData).split(":") else listOf("mc", "grass_block")).toMutableList()
+        //        val split = (if (namespaceID.contains("{")) namespaceID.parseKether(player, defaultData).split(":") else listOf("mc", "grass_block")).toMutableList()
 //        val source = if (split.size >= 2) split.first().lowercase() else "mc"
 //        split.removeFirst()
 //        val item = split.joinToString(":")
@@ -68,8 +66,7 @@ data class OmniItem(
         if (parameters?.isNotEmpty() ?: false) {
 
             val meta = itemStack.itemMeta
-            parameters["name"]?.toString()?.toComponent()?.let { meta.displayName(it) }
-            parameters["display-name"]?.toString()?.toComponent()?.let { meta.displayName(it) }
+            (parameters["display-name"]?.toString() ?: parameters["name"]?.toString())?.toComponent()?.let { meta.displayName(it) }
             parameters["custom-name"]?.toString()?.toComponent()?.let { meta.customName(it) }
             parameters["item-name"]?.toString()?.toComponent()?.let { meta.itemName(it) }
             (parameters["item-model"] ?: parameters["model"])?.toString()?.let { meta.itemModel = NamespacedKey.fromString(it) }
@@ -89,8 +86,8 @@ data class OmniItem(
                 warningL("WarningNotSupportDataComponent")
             }
         }
-        if (amount != null) {
-            itemStack.amount = amount
+        if (overrideAmount != null) {
+            itemStack.amount = overrideAmount
         }
         return itemStack
     }

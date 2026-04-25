@@ -6,9 +6,9 @@ import org.bukkit.Bukkit
 val dependencies = listOf(
     "adventure",
     // "arim",
-    "caffeine",
-    "fluxon",
-    // "graaljs",
+//    "caffeine",
+//    "fluxon",
+     "graaljs",
     "gson",
     "jackson",
     // "kotlincrypto",

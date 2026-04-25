@@ -143,7 +143,7 @@ object DungeonHelper {
                 return null
             }
 
-            val schematicPath = File("plugins/KDungeon/schematics/$schematicFile")
+            val schematicPath = File(getDataFolder(), "schematics/$schematicFile")
             if (!schematicPath.exists()) {
                 severeL("ErrorSchematicNotFound", schematicFile)
                 return null
@@ -198,7 +198,7 @@ object DungeonHelper {
         schematicFile: File,
         template: DungeonTemplate
     ) {
-        val plugin = Bukkit.getPluginManager().getPlugin("KAngelDP") ?: return
+
 
         submitAsync {
             try {
@@ -250,9 +250,9 @@ object DungeonHelper {
 
                 // 使用模板中的出生点作为粘贴位置
                 val pasteLocation = com.sk89q.worldedit.math.BlockVector3.at(
-                    template.spawnPoint.blockX,
-                    template.spawnPoint.blockY,
-                    template.spawnPoint.blockZ
+                    template.schematicPasteLocation.blockX,
+                    template.schematicPasteLocation.blockY,
+                    template.schematicPasteLocation.blockZ
                 )
 
                 val operation = holder.createPaste(session)
@@ -386,8 +386,9 @@ object DungeonHelper {
             Bukkit.unloadWorld(world, false)
         }
 
-        // 异步删除文件
-        val plugin = Bukkit.getPluginManager().getPlugin("KAngelDP") ?: return
+        // 从活跃实例中移除
+        KAngelDungeon.dungeonInstances.remove(dungeonInstance.uuid)
+
         submitAsync {
             try {
                 val worldFolder = File(Bukkit.getWorldContainer(), worldName)
@@ -451,7 +452,7 @@ object DungeonHelper {
             completedAt = null,
             state = DungeonState.PREPARING,
             meta = dungeonMeta,
-            spawnLocation = template.spawnVector.toLocation(world)
+            spawnLocation = template.playerSpawnOffset.toLocation(world)
         )
         KAngelDungeon.dungeonInstances[uuid] = instance
         devLog("Dungeon created: $instance")

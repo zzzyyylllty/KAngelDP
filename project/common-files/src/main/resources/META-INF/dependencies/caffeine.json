@@ -3,10 +3,7 @@
     "value": "com.github.ben-manes.caffeine:caffeine:$caffeineVersion",
     "relocate": [
       "com.github.benmanes.caffeine",
-      "io.github.zzzyyylllty.kangeldungeon.library.caffeine"
-    ],
-    "test": [
-      "com.github.benmanes.caffeine.cache.Caffeine"
+      "io.github.zzzyyylllty.kangeldungeon.dep.caffeine"
     ],
     "transitive": true,
     "ignoreOptional": false,

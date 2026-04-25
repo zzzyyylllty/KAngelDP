@@ -3,10 +3,7 @@
     "value": "net.kyori:adventure-text-serializer-legacy:$adventureVersion",
     "relocate": [
       "net.kyori",
-      "io.github.zzzyyylllty.kangeldungeon.library.kyori"
-    ],
-    "test": [
-      "net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer"
+      "io.github.zzzyyylllty.kangeldungeon.dep.kyori"
     ],
     "transitive": false,
     "ignoreOptional": false,
@@ -21,10 +18,7 @@
     "value": "net.kyori:adventure-text-serializer-gson:$adventureVersion",
     "relocate": [
       "net.kyori",
-      "io.github.zzzyyylllty.kangeldungeon.library.kyori"
-    ],
-    "test": [
-      "net.kyori.adventure.text.serializer.gson.GsonComponentSerializer"
+      "io.github.zzzyyylllty.kangeldungeon.dep.kyori"
     ],
     "transitive": false,
     "ignoreOptional": false,
@@ -39,7 +33,7 @@
     "value": "net.kyori:adventure-api:$adventureVersion",
     "relocate": [
       "net.kyori",
-      "io.github.zzzyyylllty.kangeldungeon.library.kyori"
+      "io.github.zzzyyylllty.kangeldungeon.dep.kyori"
     ],
     "test": [],
     "transitive": false,
@@ -55,10 +49,7 @@
     "value": "net.kyori:adventure-text-minimessage:$adventureVersion",
     "relocate": [
       "net.kyori",
-      "io.github.zzzyyylllty.kangeldungeon.library.kyori"
-    ],
-    "test": [
-      "net.kyori.adventure.text.minimessage.MiniMessage"
+      "io.github.zzzyyylllty.kangeldungeon.dep.kyori"
     ],
     "transitive": false,
     "ignoreOptional": false,

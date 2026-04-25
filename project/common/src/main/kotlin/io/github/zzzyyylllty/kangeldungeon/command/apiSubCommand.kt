@@ -1,7 +1,8 @@
 package io.github.zzzyyylllty.kangeldungeon.command
 
 import io.github.zzzyyylllty.kangeldungeon.function.kether.runKether
-import io.github.zzzyyylllty.kangeldungeon.logger.infoS
+import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
+import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -15,7 +16,7 @@ import taboolib.common.platform.function.submitAsync
 
 @CommandHeader(
     name = "kangeldungeonapi",
-    aliases = ["rpgapi"],
+    aliases = ["dga", "dungeonapi"],
     permission = "kangeldungeon.command.api",
     description = "api Command of KAngelDungeon.",
     permissionMessage = "",
@@ -43,7 +44,7 @@ object ApiCommand {
                     val mm = MiniMessage.miniMessage()
                     // 获取参数的值
                     val content = context["content"]
-                    sender.infoS(content) }
+                    sender.sendStringAsComponent(content) }
             }
         }
     }
@@ -58,8 +59,26 @@ object ApiCommand {
                     // 获取参数的值
                     val content = context["script"]
                     val ret = runKether(listOf(content), sender)
-                    sender.infoS("<yellow>Kether: <gray>$content")
-                    sender.infoS("<yellow>Return: <gray>${ret.get()}") }
+                    sender.sendStringAsComponent("<yellow>Kether: <gray>$content")
+                    sender.sendStringAsComponent("<yellow>Return: <gray>${ret.get()}") }
+            }
+        }
+    }
+
+
+
+    /** Kether */
+    @CommandBody
+    val evalJs = subCommand {
+        dynamic("script") {
+            execute<CommandSender> { sender, context, argument ->
+                submitAsync {
+                    val mm = MiniMessage.miniMessage()
+                    // 获取参数的值
+                    val content = context["script"]
+                    val ret = GraalJsUtil.directEval(content, mapOf("player" to sender))
+                    sender.sendStringAsComponent("<yellow>Kether: <gray>$content")
+                    sender.sendStringAsComponent("<yellow>Return: <gray>${ret}") }
             }
         }
     }
@@ -77,8 +96,8 @@ object ApiCommand {
                         // 获取参数的值
                         val content = context["script"]
                         val ret = runKether(listOf(content), bukkitPlayer)
-                        sender.infoS("<yellow>Kether: <gray>$content")
-                        sender.infoS("<yellow>Return: <gray>${ret.get()}") }
+                        sender.sendStringAsComponent("<yellow>Kether: <gray>$content")
+                        sender.sendStringAsComponent("<yellow>Return: <gray>${ret.get()}") }
                 }
             }
         }

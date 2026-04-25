@@ -129,7 +129,10 @@ allprojects {
 //        compileOnly("com.github.cryptomorin:XSeries:master-57d7b42")
 //        taboo("io.github.zzzyyylllty:EmbianComponent:1.0.2")
 //        compileOnly("com.willfp:eco:6.77.2")
+        taboo("ink.ptms:um:1.2.1")
+        taboo(rootProject.libs.kotlincrypto.sha2)
 
+        compileOnly(rootProject.libs.bundles.graalvm)
         compileOnly("com.sk89q.worldedit:worldedit-bukkit:7.2.13")
         taboo("com.github.zzzyyylllty:EmbianComponent:1.0.3")
         implementation("com.sk89q.worldguard:worldguard-bukkit:7.0.10-SNAPSHOT")
@@ -141,7 +144,7 @@ allprojects {
         // Minecraft 相关库 (仅编译时需要)
         compileOnly(rootProject.libs.mythiclibdist)
         compileOnly(rootProject.libs.placeholderapi)
-        compileOnly(rootProject.libs.fluxoncore)
+//        compileOnly(rootProject.libs.fluxoncore)
 
         compileOnly(files(rootProject.file("libs/AttributePlus-3.3.2.0.jar")))
 

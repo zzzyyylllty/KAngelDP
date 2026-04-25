@@ -1,8 +1,6 @@
 package io.github.zzzyyylllty.kangeldungeon.command
 
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.reloadCustomConfig
-import io.github.zzzyyylllty.kangeldungeon.logger.fineS
-import io.github.zzzyyylllty.kangeldungeon.logger.infoS
 import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
 import taboolib.common.platform.command.component.CommandComponentDynamic
 import taboolib.common.platform.command.component.CommandComponentLiteral
@@ -47,7 +45,7 @@ import taboolib.module.nms.MinecraftVersion.versionId
 
 @CommandHeader(
     name = "kangeldungeon",
-    aliases = ["rpg"],
+    aliases = ["dg", "dungeon"],
     permission = "kangeldungeon.command.main",
     description = "Main Command of KAngelDungeon.",
     permissionMessage = "",
@@ -59,10 +57,10 @@ object KAngelDungeonMainCommand {
     @CommandBody
     val about = subCommand {
         execute<CommandSender> { sender, context, argument ->
-            sender.infoS("<gradient:aqua:blue>KAngelDungeon</gradient> <#ccccff>$pluginVersion")
-            sender.infoS("<gradient:#6600ff:#aa00aa>Running on:</gradient> <light_purple>${runningPlatform.name} - $versionId")
-            sender.infoS("<#cc66ff>Plugin by AkaCandyKAngel.")
-            sender.infoS("<#cc66ff>Use <blue>/kangeldungeon help</blue> for help.")
+            sender.sendStringAsComponent("<gradient:aqua:blue>KAngelDungeon</gradient> <#ccccff>$pluginVersion")
+            sender.sendStringAsComponent("<gradient:#6600ff:#aa00aa>Running on:</gradient> <light_purple>${runningPlatform.name} - $versionId")
+            sender.sendStringAsComponent("<#cc66ff>Plugin by AkaCandyKAngel.")
+            sender.sendStringAsComponent("<#cc66ff>Use <blue>/kangeldungeon help</blue> for help.")
         }
     }
     @CommandBody
@@ -87,24 +85,23 @@ object KAngelDungeonMainCommand {
 
     @CommandBody
     val data = DataCommand
-
-    @CommandBody
-    val level = LevelCommand
-
     @CommandBody
     val api = ApiCommand
+    @CommandBody
+    val dungeon = DungeonCommand
 
 
     @CommandBody
     val reload = subCommand {
         execute<CommandSender> { sender, context, argument ->
-            sender.infoS("Reloading...")
+            sender.sendStringAsComponent("<yellow>Reloading...")
             try {
                 reloadCustomConfig(true)
-                sender.fineS("Reloaded.")
+                sender.sendStringAsComponent("<green>Reloaded.")
             }
             catch (e: Exception) {
-
+                sender.sendStringAsComponent("<red>Reload failed: ${e.message}")
+                e.printStackTrace()
             }
         }
     }

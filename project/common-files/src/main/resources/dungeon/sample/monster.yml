@@ -1,11 +1,10 @@
-skeletons:
+zombies:
   monsters:
-    - mob: mythicmobs:SkeletonKing
+    - mob: minecraft:zombie # mythicmobs:SkeletonKing
       location: -112,-60,101
       amount: 3
       scattered: 5
       level: 0
   agent:
-    onSpawn:
-      js: |-
-        instance.sendMessageToAllPlayers("Monster spawned!")
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("Monster spawned!")

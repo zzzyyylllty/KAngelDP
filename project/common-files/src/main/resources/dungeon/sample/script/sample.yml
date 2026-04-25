@@ -1,7 +1,9 @@
 sample:
-  onRun:
-    js: |-
-      instance.sendMessageToAllPlayers("<yellow>Hello World!")
-  onPost:
-    js: |-
-      instance.sendMessageToAllPlayers("<green>Hello World Running Completed.")
+  onRun: |-
+    instance.sendMessageToAllPlayers("<yellow>Hello World!")
+    instance.sendActionBarToAllPlayers("<green>Dungeon starting...</green>")
+    instance.setWorldTime(1000)
+  onPost: |-
+    instance.sendMessageToAllPlayers("<green>Hello World Running Completed.")
+    instance.healAllPlayers()
+    instance.clearAllPlayersEffects()

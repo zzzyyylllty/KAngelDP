@@ -3,10 +3,7 @@ package io.github.zzzyyylllty.kangeldungeon.command
 import io.github.zzzyyylllty.embiancomponent.EmbianComponent.SafetyComponentSetter
 import io.github.zzzyyylllty.embiancomponent.tools.getComponentsNMSFiltered
 import io.github.zzzyyylllty.kangeldungeon.data.DataUtil
-import io.github.zzzyyylllty.kangeldungeon.logger.infoS
-import io.github.zzzyyylllty.kangeldungeon.logger.infoS
 import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
-import io.github.zzzyyylllty.kangeldungeon.logger.severeS
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmUtil
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -34,7 +31,7 @@ import kotlin.text.toDouble
 
 @CommandHeader(
     name = "kangeldungeondata",
-    aliases = ["rpgdata"],
+    aliases = ["dgd", "dungeond"],
     permission = "kangeldungeon.command.data",
     description = "DATA Command of KAngelDungeon.",
     permissionMessage = "",
@@ -60,29 +57,28 @@ object DataCommand {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
                     val player = sender as? Player? ?: run {
-                        sender.severeS(sender.asLangText("PlayerOnlyCommand"))
+                        sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                         return@submitAsync
                     }
                     val key = context["id"]
                     val data = DataUtil.getDataRaw(player, key)
                     var message = sender.asLangText("PlayerData_Fetch", player.name, key, data ?: "<i>null")
-                    sender.infoS(message, false)
+                    sender.sendStringAsComponent(message)
                 }
             }
             player("player") {
                 execute<CommandSender> { sender, context, argument ->
                     submitAsync {
-                        val id = context["id"]
                         val tabooPlayer = context.player("player")
                         // 转化为Bukkit的Player
                         val player = tabooPlayer.castSafely<Player>() ?: run {
-                            sender.severeS(sender.asLangText("PlayerNotExist"))
+                            sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                             return@submitAsync
                         }
                         val key = context["id"]
                         val data = DataUtil.getDataRaw(player, key)
                         var message = sender.asLangText("PlayerData_Fetch", player.name, key, data ?: "<i>null")
-                        sender.infoS(message, false)
+                        sender.sendStringAsComponent(message)
                     }
                 }
             }
@@ -96,29 +92,28 @@ object DataCommand {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
                     val player = sender as? Player? ?: run {
-                        sender.severeS(sender.asLangText("PlayerOnlyCommand"))
+                        sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                         return@submitAsync
                     }
                     val key = context["id"]
                     DataUtil.removeData(player, key)
                     var message = sender.asLangText("PlayerData_Remove", player.name, key)
-                    sender.infoS(message, false)
+                    sender.sendStringAsComponent(message)
                 }
             }
             player("player") {
                 execute<CommandSender> { sender, context, argument ->
                     submitAsync {
-                        val id = context["id"]
                         val tabooPlayer = context.player("player")
                         // 转化为Bukkit的Player
                         val player = tabooPlayer.castSafely<Player>() ?: run {
-                            sender.severeS(sender.asLangText("PlayerNotExist"))
+                            sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                             return@submitAsync
                         }
                         val key = context["id"]
                         DataUtil.removeData(player, key)
                         var message = sender.asLangText("PlayerData_Remove", player.name, key)
-                        sender.infoS(message, false)
+                        sender.sendStringAsComponent(message)
                     }
                 }
             }
@@ -133,18 +128,17 @@ object DataCommand {
                 dynamic("value") {
                     execute<CommandSender> { sender, context, argument ->
                         submitAsync {
-                            val id = context["id"]
                             val dvalue = context["value"]
                             val tabooPlayer = context.player("player")
                             // 转化为Bukkit的Player
                             val player = tabooPlayer.castSafely<Player>() ?: run {
-                                sender.severeS(sender.asLangText("PlayerNotExist"))
+                                sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                                 return@submitAsync
                             }
                             val key = context["id"]
                             DataUtil.setData(player, key, dvalue)
                             var message = sender.asLangText("PlayerData_Modify", player.name, key, dvalue)
-                            sender.infoS(message, false)
+                            sender.sendStringAsComponent(message)
                         }
                     }
                 }
@@ -157,12 +151,12 @@ object DataCommand {
         execute<CommandSender> { sender, context, argument ->
             submitAsync {
                 val player = sender as? Player? ?: run {
-                    sender.severeS(sender.asLangText("PlayerOnlyCommand"))
+                    sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                     return@submitAsync
                 }
                 DataUtil.resetAllData(player)
                 var message = sender.asLangText("PlayerData_Clear", player.name)
-                sender.infoS(message, false)
+                sender.sendStringAsComponent(message)
             }
 
         }
@@ -172,12 +166,12 @@ object DataCommand {
                     val tabooPlayer = context.player("player")
                     // 转化为Bukkit的Player
                     val player = tabooPlayer.castSafely<Player>() ?: run {
-                        sender.severeS(sender.asLangText("PlayerNotExist"))
+                        sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                         return@submitAsync
                     }
                     DataUtil.resetAllData(player)
                     var message = sender.asLangText("PlayerData_Clear", player.name)
-                    sender.infoS(message, false)
+                    sender.sendStringAsComponent(message)
                 }
 
             }
@@ -190,29 +184,28 @@ object DataCommand {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
                     val player = sender as? Player? ?: run {
-                        sender.severeS(sender.asLangText("PlayerOnlyCommand"))
+                        sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                         return@submitAsync
                     }
                     val key = context["id"]
                     val data = DataUtil.getCooldownLeftLong(player, key)?.toDouble()?.div(1000)
                     var message = sender.asLangText("PlayerCooldown_Fetch", player.name, key, data ?: "<i>null")
-                    sender.infoS(message, false)
+                    sender.sendStringAsComponent(message)
                 }
             }
             player("player") {
                 execute<CommandSender> { sender, context, argument ->
                     submitAsync {
-                        val id = context["id"]
                         val tabooPlayer = context.player("player")
                         // 转化为Bukkit的Player
                         val player = tabooPlayer.castSafely<Player>() ?: run {
-                            sender.severeS(sender.asLangText("PlayerNotExist"))
+                            sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                             return@submitAsync
                         }
                         val key = context["id"]
                         val data = DataUtil.getCooldownLeftLong(player, key)?.toDouble()?.div(1000)
                         var message = sender.asLangText("PlayerCooldown_Fetch", player.name, key, data ?: "<i>null")
-                        sender.infoS(message, false)
+                        sender.sendStringAsComponent(message)
                     }
                 }
             }
@@ -226,29 +219,28 @@ object DataCommand {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
                     val player = sender as? Player? ?: run {
-                        sender.severeS(sender.asLangText("PlayerOnlyCommand"))
+                        sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                         return@submitAsync
                     }
                     val key = context["id"]
                     DataUtil.resetCooldown(player, key)
                     var message = sender.asLangText("PlayerCooldown_Remove", player.name, key)
-                    sender.infoS(message, false)
+                    sender.sendStringAsComponent(message)
                 }
             }
             player("player") {
                 execute<CommandSender> { sender, context, argument ->
                     submitAsync {
-                        val id = context["id"]
                         val tabooPlayer = context.player("player")
                         // 转化为Bukkit的Player
                         val player = tabooPlayer.castSafely<Player>() ?: run {
-                            sender.severeS(sender.asLangText("PlayerNotExist"))
+                            sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                             return@submitAsync
                         }
                         val key = context["id"]
                         DataUtil.resetCooldown(player, key)
                         var message = sender.asLangText("PlayerCooldown_Remove", player.name, key)
-                        sender.infoS(message, false)
+                        sender.sendStringAsComponent(message)
                     }
                 }
             }
@@ -263,18 +255,17 @@ object DataCommand {
                 dynamic("value") {
                     execute<CommandSender> { sender, context, argument ->
                         submitAsync {
-                            val id = context["id"]
                             val dvalue = context["value"]
                             val tabooPlayer = context.player("player")
                             // 转化为Bukkit的Player
                             val player = tabooPlayer.castSafely<Player>() ?: run {
-                                sender.severeS(sender.asLangText("PlayerNotExist"))
+                                sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                                 return@submitAsync
                             }
                             val key = context["id"]
                             DataUtil.setCooldown(player, key, dvalue.toDouble())
                             var message = sender.asLangText("PlayerCooldown_Modify", player.name, key, dvalue)
-                            sender.infoS(message, false)
+                            sender.sendStringAsComponent(message)
                         }
                     }
                 }
@@ -287,12 +278,12 @@ object DataCommand {
         execute<CommandSender> { sender, context, argument ->
             submitAsync {
                 val player = sender as? Player? ?: run {
-                    sender.severeS(sender.asLangText("PlayerOnlyCommand"))
+                    sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                     return@submitAsync
                 }
                 DataUtil.resetAllCooldown(player)
                 var message = sender.asLangText("PlayerCooldown_Clear", player.name)
-                sender.infoS(message, false)
+                sender.sendStringAsComponent(message)
             }
 
         }
@@ -302,12 +293,12 @@ object DataCommand {
                     val tabooPlayer = context.player("player")
                     // 转化为Bukkit的Player
                     val player = tabooPlayer.castSafely<Player>() ?: run {
-                        sender.severeS(sender.asLangText("PlayerNotExist"))
+                        sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                         return@submitAsync
                     }
                     DataUtil.resetAllCooldown(player)
                     var message = sender.asLangText("PlayerCooldown_Clear", player.name)
-                    sender.infoS(message, false)
+                    sender.sendStringAsComponent(message)
                 }
 
             }
@@ -319,7 +310,7 @@ object DataCommand {
         execute<CommandSender> { sender, context, argument ->
             submitAsync {
                 val player = sender as? Player? ?: run {
-                    sender.severeS(sender.asLangText("PlayerOnlyCommand"))
+                    sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                     return@submitAsync
                 }
 
@@ -333,7 +324,7 @@ object DataCommand {
                     val tabooPlayer = context.player("player")
                     // 转化为Bukkit的Player
                     val player = tabooPlayer.castSafely<Player>() ?: run {
-                        sender.severeS(sender.asLangText("PlayerNotExist"))
+                        sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                         return@submitAsync
                     }
                     sender.sendStringAsComponent(browseDataMap(sender, player.name, DataUtil.getAllDataRaw(player)))

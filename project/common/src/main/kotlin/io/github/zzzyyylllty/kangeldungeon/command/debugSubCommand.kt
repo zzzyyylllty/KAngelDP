@@ -3,10 +3,7 @@ package io.github.zzzyyylllty.kangeldungeon.command
 import io.github.zzzyyylllty.embiancomponent.EmbianComponent.SafetyComponentSetter
 import io.github.zzzyyylllty.embiancomponent.tools.getComponentsNMSFiltered
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.blockRegenMap
-import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.levels
-import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.regenTemplates
-import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.regenTemplatesByBlock
-import io.github.zzzyyylllty.kangeldungeon.logger.infoS
+import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
 import org.bukkit.Material
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -28,7 +25,7 @@ import kotlin.text.get
 
 @CommandHeader(
     name = "kangeldungeondebug",
-    aliases = ["rpgdebug"],
+    aliases = ["dgd", "dungeondebug"],
     permission = "kangeldungeon.command.debug",
     description = "DEBUG Command of KAngelDungeon.",
     permissionMessage = "",
@@ -51,31 +48,8 @@ object DebugCommand {
     val getBlockRegenMap = subCommand {
         execute<CommandSender> { sender, context, argument ->
             var message = blockRegenMap.toString()
-            sender.infoS(message, false)
+            sender.sendStringAsComponent(message)
         }
     }
 
-    @CommandBody
-    val getRegenTemplatesByBlock = subCommand {
-        execute<CommandSender> { sender, context, argument ->
-            var message = regenTemplatesByBlock.toString()
-            sender.infoS(message, false)
-        }
-    }
-
-    @CommandBody
-    val getRegenTemplates = subCommand {
-        execute<CommandSender> { sender, context, argument ->
-            var message = regenTemplates.toString()
-            sender.infoS(message, false)
-        }
-    }
-
-    @CommandBody
-    val getLevels = subCommand {
-        execute<CommandSender> { sender, context, argument ->
-            var message = levels.toString()
-            sender.infoS(message, false)
-        }
-    }
 }

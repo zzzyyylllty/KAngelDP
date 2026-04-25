@@ -8,11 +8,14 @@ import io.github.zzzyyylllty.kangeldungeon.function.javascript.ItemStackUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.PlayerUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.ThreadUtil
 import io.github.zzzyyylllty.kangeldungeon.function.kether.evalKether
+import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
+import io.github.zzzyyylllty.kangeldungeon.util.TargetSelectorHelper
 //import io.github.zzzyyylllty.kangeldungeon.util.jsonUtil
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmJsonUtil
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmLegacyAmpersandUtil
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmLegacySectionUtil
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmUtil
+import io.github.zzzyyylllty.kangeldungeon.util.toBooleanTolerance
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import taboolib.common.LifeCycle
@@ -41,7 +44,8 @@ fun registerExternalData() {
             "Math" to Math::class.java,
             "System" to System::class.java,
             "Bukkit" to Bukkit::class.java,
-            "Gson" to Gson::class.java
+            "Gson" to Gson::class.java,
+            "TargetSelectorHelper" to TargetSelectorHelper
         ))
     val event = KAngelDungeonCustomScriptDataLoadEvent(defaultData)
     event.call()
@@ -51,35 +55,19 @@ fun registerExternalData() {
 data class Agents(
     val agents: LinkedHashMap<String, Agent>
 ) {
-    fun runAgent(agent: String, extraVariables: Map<String, Any?>, player: Player?) {
-        agents[agent]?.runAgent(extraVariables, player)
+    fun runAgent(agent: String, extraVariables: Map<String, Any?>, player: Player?): Boolean? {
+        return agents[agent]?.runAgent(extraVariables, player)
     }
 }
 
 data class Agent(
     val trigger: String,
-    val js: CompiledScript? = null,
-    val asyncJs: CompiledScript? = null,
-    val asyncKe: List<String>? = null,
-    val kether: List<String>? = null,
+    val gjs: String?,
 ){
-    fun runAgent(extraVariables: Map<String, Any?>, player: Player?) {
+    fun runAgent(extraVariables: Map<String, Any?>, player: Player?): Boolean {
         val data = defaultData + extraVariables + mapOf("player" to player, "trigger" to trigger)
-        js?.let {
-            submit {
-                it.eval(SimpleBindings(data))
-            }
-        }
-        kether?.evalKether(player, data)
-        asyncJs?.let {
-            submitAsync {
-                it.eval(SimpleBindings(data))
-            }
-        }
-        asyncKe?.let {
-            submitAsync {
-                it.evalKether(player, data)
-            }
-        }
+        return gjs?.let {
+            GraalJsUtil.cachedEval(it, data)
+        }?.toBooleanTolerance() ?: true
     }
 }
