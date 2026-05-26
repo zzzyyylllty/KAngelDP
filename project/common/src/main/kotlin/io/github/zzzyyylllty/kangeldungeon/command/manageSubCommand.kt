@@ -3,6 +3,7 @@ package io.github.zzzyyylllty.kangeldungeon.command
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonState
 import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
+import io.github.zzzyyylllty.kangeldungeon.team.TeamManager
 import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
@@ -13,8 +14,14 @@ import taboolib.common.platform.command.PermissionDefault
 import taboolib.common.platform.command.mainCommand
 import taboolib.common.platform.command.player
 import taboolib.common.platform.command.subCommand
-import taboolib.common.platform.function.submitAsync
 import taboolib.platform.util.asLangText
+
+private fun CommandSender.stateLabel(state: DungeonState): String = when (state) {
+    DungeonState.PREPARING -> asLangText("DungeonStatePreparing")
+    DungeonState.ACTIVE -> asLangText("DungeonStateActive")
+    DungeonState.COMPLETED -> asLangText("DungeonStateCompleted")
+    DungeonState.FAILED -> asLangText("DungeonStateFailed")
+}
 
 @CommandHeader(
     name = "kangeldungeonmanage",
@@ -45,95 +52,52 @@ object DungeonCommand {
         execute<CommandSender> { sender, context, argument ->
             val templates = KAngelDungeon.dungeonTemplates
             if (templates.isEmpty()) {
-                sender.sendStringAsComponent("<yellow>没有可用的地牢模板")
+                sender.sendStringAsComponent(sender.asLangText("DungeonNoTemplates"))
                 return@execute
             }
-            sender.sendStringAsComponent("<gradient:gold:yellow>===== 地牢模板列表 =====</gradient>")
+            sender.sendStringAsComponent(sender.asLangText("DungeonTemplateHeader"))
             for ((name, template) in templates) {
                 sender.sendStringAsComponent(
-                    " <gray>- <gold>${template.displayName}</gold> <dark_gray>($name)</dark_gray>" +
-                    " | <gray>玩家人数限制</gray>" +
-                    " | <gray>时间限制: ${template.timeLimit?.toInt()}s</gray>"
+                    sender.asLangText("DungeonTemplateEntry",
+                        template.displayName, name,
+                        template.gameplayGeneral.minPlayers.toString(), template.gameplayGeneral.maxPlayers.toString(),
+                        template.timeLimit?.toInt()?.toString() ?: "0")
                 )
             }
         }
     }
 
     /**
-     * 创建地牢
-     * /kangeldungeon dungeon create <template> [players ...]
+     * 创建并自动开始地牢
+     * /kangeldungeon dungeon create <template> [player]
      */
     @CommandBody
     val create = subCommand {
         dynamic("template") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonTemplates.keys.toList()
+            }
             execute<CommandSender> { sender, context, argument ->
                 sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
             }
             player("player") {
                 execute<CommandSender> { sender, context, argument ->
-                    submitAsync {
-                        val leader = context.player("player").castSafely<Player>() ?: run {
-                            sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
-                            return@submitAsync
-                        }
-                        val templateName = context["template"]
-                        val template = KAngelDungeon.dungeonTemplates[templateName]
-                        if (template == null) {
-                            sender.sendStringAsComponent("<red>地牢模板 $templateName 不存在!</red>")
-                            return@submitAsync
-                        }
-
-                        // 解析额外玩家
-                        val players = mutableListOf(leader)
-                        val playersStr = context["players"]
-                        if (playersStr.isNotBlank()) {
-                            for (name in playersStr.split(" ")) {
-                                val p = Bukkit.getPlayerExact(name)
-                                if (p != null && p !in players) players.add(p)
-                            }
-                        }
-
-                        if (players.isEmpty()) {
-                            sender.sendStringAsComponent("<red>没有可加入地牢的玩家!</red>")
-                            return@submitAsync
-                        }
-
-                        DungeonHelper.createDungeon(templateName, players, leader, emptyMap())
-                        sender.sendStringAsComponent("<green>地牢 <gold>$templateName</gold> 已创建!</green>")
+                    val leader = context.player("player").castSafely<Player>() ?: run {
+                        sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
+                        return@execute
                     }
+                    createDungeonAndStart(sender, context["template"], leader, null)
                 }
                 dynamic("players") {
+                    suggestion<CommandSender> { _, _ ->
+                        Bukkit.getOnlinePlayers().map { it.name }.toList()
+                    }
                     execute<CommandSender> { sender, context, argument ->
-                        submitAsync {
-                            val leader = context.player("player").castSafely<Player>() ?: run {
-                                sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
-                                return@submitAsync
-                            }
-                            val templateName = context["template"]
-                            val template = KAngelDungeon.dungeonTemplates[templateName]
-                            if (template == null) {
-                                sender.sendStringAsComponent("<red>地牢模板 $templateName 不存在!</red>")
-                                return@submitAsync
-                            }
-
-                            // 解析额外玩家
-                            val players = mutableListOf(leader)
-                            val playersStr = context["players"]
-                            if (playersStr.isNotBlank()) {
-                                for (name in playersStr.split(" ")) {
-                                    val p = Bukkit.getPlayerExact(name)
-                                    if (p != null && p !in players) players.add(p)
-                                }
-                            }
-
-                            if (players.isEmpty()) {
-                                sender.sendStringAsComponent("<red>没有可加入地牢的玩家!</red>")
-                                return@submitAsync
-                            }
-
-                            DungeonHelper.createDungeon(templateName, players, leader, emptyMap())
-                            sender.sendStringAsComponent("<green>地牢 <gold>$templateName</gold> 已创建!</green>")
+                        val leader = context.player("player").castSafely<Player>() ?: run {
+                            sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
+                            return@execute
                         }
+                        createDungeonAndStart(sender, context["template"], leader, context["players"])
                     }
                 }
             }
@@ -147,23 +111,29 @@ object DungeonCommand {
     @CommandBody
     val start = subCommand {
         dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances
+                    .filter { it.value.state == DungeonState.PREPARING }
+                    .map { it.key.toString() }
+                    .toList()
+            }
             execute<CommandSender> { sender, context, argument ->
                 val uuidStr = context["uuid"]
                 val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
                 if (uuid == null) {
-                    sender.sendStringAsComponent("<red>无效的UUID: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
                     return@execute
                 }
                 val instance = KAngelDungeon.dungeonInstances[uuid]
                 if (instance == null) {
-                    sender.sendStringAsComponent("<red>地牢实例不存在: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
                     return@execute
                 }
                 val success = instance.start()
                 if (success) {
-                    sender.sendStringAsComponent("<green>地牢 ${instance.templateName} 已开始!</green>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonStarted", instance.templateName))
                 } else {
-                    sender.sendStringAsComponent("<yellow>地牢 ${instance.templateName} 无法开始，请检查状态</yellow>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonCannotStart", instance.templateName))
                 }
             }
         }
@@ -176,23 +146,29 @@ object DungeonCommand {
     @CommandBody
     val stop = subCommand {
         dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances
+                    .filter { it.value.state == DungeonState.ACTIVE || it.value.state == DungeonState.PREPARING }
+                    .map { it.key.toString() }
+                    .toList()
+            }
             execute<CommandSender> { sender, context, argument ->
                 val uuidStr = context["uuid"]
                 val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
                 if (uuid == null) {
-                    sender.sendStringAsComponent("<red>无效的UUID: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
                     return@execute
                 }
                 val instance = KAngelDungeon.dungeonInstances[uuid]
                 if (instance == null) {
-                    sender.sendStringAsComponent("<red>地牢实例不存在: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
                     return@execute
                 }
                 val success = instance.fail()
                 if (success) {
-                    sender.sendStringAsComponent("<green>地牢 ${instance.templateName} 已强制结束!</green>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonStopped", instance.templateName))
                 } else {
-                    sender.sendStringAsComponent("<yellow>地牢 ${instance.templateName} 无法结束</yellow>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonCannotStop", instance.templateName))
                 }
             }
         }
@@ -207,24 +183,18 @@ object DungeonCommand {
         execute<CommandSender> { sender, context, argument ->
             val instances = KAngelDungeon.dungeonInstances
             if (instances.isEmpty()) {
-                sender.sendStringAsComponent("<yellow>当前没有活跃的地牢实例</yellow>")
+                sender.sendStringAsComponent(sender.asLangText("DungeonNoInstances"))
                 return@execute
             }
-            sender.sendStringAsComponent("<gradient:gold:yellow>===== 活跃地牢列表 (${instances.size}) =====</gradient>")
+            sender.sendStringAsComponent(sender.asLangText("DungeonListHeader", instances.size.toString()))
             for ((uuid, instance) in instances) {
-                val stateColor = when (instance.state) {
-                    DungeonState.PREPARING -> "<yellow>准备中"
-                    DungeonState.ACTIVE -> "<green>进行中"
-                    DungeonState.COMPLETED -> "<gray>已完成"
-                    DungeonState.FAILED -> "<red>已失败"
-                }
+                val stateLabel = sender.stateLabel(instance.state)
                 val elapsed = instance.getElapsedTime().toInt()
                 sender.sendStringAsComponent(
-                    " <gray>-</gray> <gold>${instance.templateName}</gold>" +
-                    " | $stateColor</reset>" +
-                    " | <gray>玩家: ${instance.getAlivePlayerCount()}/${instance.getPlayerCount()}</gray>" +
-                    " | <gray>已用: ${elapsed}s</gray>" +
-                    " | <dark_gray>$uuid</dark_gray>"
+                    sender.asLangText("DungeonListEntry",
+                        instance.templateName, stateLabel,
+                        instance.getAlivePlayerCount().toString(), instance.getPlayerCount().toString(),
+                        elapsed.toString(), uuid.toString())
                 )
             }
         }
@@ -237,28 +207,31 @@ object DungeonCommand {
     @CommandBody
     val info = subCommand {
         dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances.map { it.key.toString() }.toList()
+            }
             execute<CommandSender> { sender, context, argument ->
                 val uuidStr = context["uuid"]
                 val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
                 if (uuid == null) {
-                    sender.sendStringAsComponent("<red>无效的UUID: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
                     return@execute
                 }
                 val instance = KAngelDungeon.dungeonInstances[uuid]
                 if (instance == null) {
-                    sender.sendStringAsComponent("<red>地牢实例不存在: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
                     return@execute
                 }
-                sender.sendStringAsComponent("<gradient:gold:yellow>===== 地牢详情 =====</gradient>")
-                sender.sendStringAsComponent(" <gray>模板: <gold>${instance.templateName}</gold></gray>")
-                sender.sendStringAsComponent(" <gray>UUID: <dark_gray>$uuid</dark_gray></gray>")
-                sender.sendStringAsComponent(" <gray>状态: <gold>${instance.state.name}</gold></gray>")
-                sender.sendStringAsComponent(" <gray>玩家: ${instance.getAlivePlayerCount()}/${instance.getPlayerCount()}</gray>")
-                sender.sendStringAsComponent(" <gray>在线玩家: ${instance.getOnlinePlayerNames().joinToString(", ") { "<green>$it</green>" }}</gray>")
-                sender.sendStringAsComponent(" <gray>已用时间: ${instance.getElapsedTime().toInt()}s</gray>")
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoHeader"))
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoTemplate", instance.templateName))
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoUUID", uuid.toString()))
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoState", instance.state.name))
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoPlayers", instance.getAlivePlayerCount().toString(), instance.getPlayerCount().toString()))
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoOnlinePlayers", instance.getOnlinePlayerNames().joinToString(", ") { "<green>$it</green>" }))
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoElapsed", instance.getElapsedTime().toInt().toString()))
                 val template = instance.getTemplate()
                 if (template != null) {
-                    sender.sendStringAsComponent(" <gray>时间限制: ${template.timeLimit?.toInt() ?: "无限制"}s</gray>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInfoTimeLimit", template.timeLimit?.toInt()?.toString() ?: sender.asLangText("ValueUnlimited")))
                 }
             }
         }
@@ -271,6 +244,12 @@ object DungeonCommand {
     @CommandBody
     val join = subCommand {
         dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances
+                    .filter { it.value.state == DungeonState.PREPARING || it.value.state == DungeonState.ACTIVE }
+                    .map { it.key.toString() }
+                    .toList()
+            }
             execute<CommandSender> { sender, context, argument ->
                 val player = sender as? Player ?: run {
                     sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
@@ -279,20 +258,43 @@ object DungeonCommand {
                 val uuidStr = context["uuid"]
                 val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
                 if (uuid == null) {
-                    sender.sendStringAsComponent("<red>无效的UUID: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
                     return@execute
                 }
                 val instance = KAngelDungeon.dungeonInstances[uuid]
                 if (instance == null) {
-                    sender.sendStringAsComponent("<red>地牢实例不存在: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
                     return@execute
                 }
-                val success = instance.addPlayer(player)
-                if (success) {
-                    sender.sendStringAsComponent("<green>已加入地牢 ${instance.templateName}!</green>")
-                } else {
-                    sender.sendStringAsComponent("<yellow>无法加入地牢</yellow>")
+                val dungeonTemplate = instance.getTemplate()
+                val permission = dungeonTemplate?.requiredPermission
+                if (permission != null && !player.hasPermission(permission)) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonNoPermission", permission))
+                    return@execute
                 }
+                // 先让队长加入，队长加入成功后才拉队员
+                val leaderAdded = instance.addPlayer(player)
+                if (!leaderAdded) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonCannotJoin"))
+                    return@execute
+                }
+                // 队伍集成：如果队长加入成功，自动将所有在线队员也加入
+                if (TeamManager.isEnabled && dungeonTemplate?.gameplayGeneral?.allowParty == true) {
+                    val party = TeamManager.getTeam(player.uniqueId)
+                    if (party != null && party.isLeader(player.uniqueId)) {
+                        for (memberId in party.members) {
+                            if (memberId != player.uniqueId) {
+                                val member = Bukkit.getPlayer(memberId)
+                                if (member != null && member.isOnline) {
+                                    if (!instance.addPlayer(member)) {
+                                        sender.sendStringAsComponent(sender.asLangText("DungeonAddPlayerFailed", member.name))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                sender.sendStringAsComponent(sender.asLangText("DungeonJoined", instance.templateName))
             }
         }
     }
@@ -311,14 +313,14 @@ object DungeonCommand {
             // 查找玩家所在的地牢
             val instance = KAngelDungeon.dungeonInstances.values.firstOrNull { it.players.contains(player.uniqueId) }
             if (instance == null) {
-                sender.sendStringAsComponent("<yellow>你当前不在任何地牢中</yellow>")
+                sender.sendStringAsComponent(sender.asLangText("DungeonNotInDungeon"))
                 return@execute
             }
             val success = instance.removePlayer(player)
             if (success) {
-                sender.sendStringAsComponent("<green>已离开地牢 ${instance.templateName}!</green>")
+                sender.sendStringAsComponent(sender.asLangText("DungeonLeft", instance.templateName))
             } else {
-                sender.sendStringAsComponent("<yellow>无法离开地牢</yellow>")
+                sender.sendStringAsComponent(sender.asLangText("DungeonCannotLeave"))
             }
         }
     }
@@ -330,6 +332,12 @@ object DungeonCommand {
     @CommandBody
     val tp = subCommand {
         dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances
+                    .filter { it.value.state == DungeonState.ACTIVE || it.value.state == DungeonState.PREPARING }
+                    .map { it.key.toString() }
+                    .toList()
+            }
             execute<CommandSender> { sender, context, argument ->
                 val player = sender as? Player ?: run {
                     sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
@@ -338,17 +346,273 @@ object DungeonCommand {
                 val uuidStr = context["uuid"]
                 val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
                 if (uuid == null) {
-                    sender.sendStringAsComponent("<red>无效的UUID: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
                     return@execute
                 }
                 val instance = KAngelDungeon.dungeonInstances[uuid]
                 if (instance == null) {
-                    sender.sendStringAsComponent("<red>地牢实例不存在: $uuidStr</red>")
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
                     return@execute
                 }
-                player.teleport(instance.spawnLocation)
-                sender.sendStringAsComponent("<green>已传送至地牢 ${instance.templateName}</green>")
+                // 检查权限
+                val dungeonTemplate = instance.getTemplate()
+                val permission = dungeonTemplate?.requiredPermission
+                if (permission != null && !player.hasPermission(permission)) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonNoTeleportPermission", permission))
+                    return@execute
+                }
+                // 先尝试将玩家加入地牢（会自动缓存原位置、传送并处理事件）
+                if (player.uniqueId !in instance.players) {
+                    if (!instance.addPlayer(player)) {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonAddPlayerFailed", player.name))
+                        return@execute
+                    }
+                } else {
+                    player.teleport(instance.spawnLocation)
+                }
+                sender.sendStringAsComponent(sender.asLangText("DungeonTeleported", instance.templateName))
             }
+        }
+    }
+
+    /**
+     * 手动完成地牢
+     * /kangeldungeon dungeon complete <uuid>
+     */
+    @CommandBody
+    val complete = subCommand {
+        dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances
+                    .filter { it.value.state == DungeonState.ACTIVE }
+                    .map { it.key.toString() }
+                    .toList()
+            }
+            execute<CommandSender> { sender, context, argument ->
+                val uuidStr = context["uuid"]
+                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
+                if (uuid == null) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
+                    return@execute
+                }
+                val instance = KAngelDungeon.dungeonInstances[uuid]
+                if (instance == null) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
+                    return@execute
+                }
+                val success = instance.complete()
+                if (success) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonCompleted", instance.templateName))
+                } else {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonCannotComplete", instance.templateName))
+                }
+            }
+        }
+    }
+
+    /**
+     * 将玩家踢出地牢
+     * /kangeldungeon dungeon kick <player>
+     */
+    @CommandBody
+    val kick = subCommand {
+        player("player") {
+            execute<CommandSender> { sender, context, argument ->
+                val target = context.player("player").castSafely<Player>()
+                if (target == null) {
+                    sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
+                    return@execute
+                }
+                val instance = KAngelDungeon.dungeonInstances.values.firstOrNull { it.players.contains(target.uniqueId) }
+                if (instance == null) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonPlayerNotInDungeon"))
+                    return@execute
+                }
+                val success = instance.removePlayer(target)
+                if (success) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonKickSuccess", target.name, instance.templateName))
+                } else {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonKickFailed"))
+                }
+            }
+        }
+    }
+
+    /**
+     * 将玩家添加到指定地牢
+     * /kangeldungeon dungeon addplayer <uuid> <player>
+     */
+    @CommandBody
+    val addplayer = subCommand {
+        dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances
+                    .filter { it.value.state == DungeonState.PREPARING || it.value.state == DungeonState.ACTIVE }
+                    .map { it.key.toString() }
+                    .toList()
+            }
+            player("player") {
+                execute<CommandSender> { sender, context, argument ->
+                    val target = context.player("player").castSafely<Player>() ?: run {
+                        sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
+                        return@execute
+                    }
+                    val uuidStr = context["uuid"]
+                    val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
+                    if (uuid == null) {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
+                        return@execute
+                    }
+                    val instance = KAngelDungeon.dungeonInstances[uuid]
+                    if (instance == null) {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
+                        return@execute
+                    }
+                    val template = instance.getTemplate()
+                    val permission = template?.requiredPermission
+                    if (permission != null && !target.hasPermission(permission)) {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonAddPlayerNoPerm", target.name, permission))
+                        return@execute
+                    }
+                    val success = instance.addPlayer(target)
+                    if (success) {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonAddPlayerSuccess", target.name, instance.templateName))
+                    } else {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonAddPlayerFailed"))
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 列出地牢中的所有玩家及其状态
+     * /kangeldungeon dungeon listplayers <uuid>
+     */
+    @CommandBody
+    val listplayers = subCommand {
+        dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances.map { it.key.toString() }.toList()
+            }
+            execute<CommandSender> { sender, context, argument ->
+                val uuidStr = context["uuid"]
+                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
+                if (uuid == null) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
+                    return@execute
+                }
+                val instance = KAngelDungeon.dungeonInstances[uuid]
+                if (instance == null) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
+                    return@execute
+                }
+                sender.sendStringAsComponent(sender.asLangText("DungeonListPlayersHeader", instance.templateName))
+                sender.sendStringAsComponent(sender.asLangText("DungeonListPlayersLeader", instance.getLeaderName() ?: sender.asLangText("ValueUnknown")))
+                for (pUuid in instance.players) {
+                    val player = Bukkit.getPlayer(pUuid)
+                    val status = when {
+                        player == null -> sender.asLangText("DungeonPlayerStatusOffline")
+                        pUuid in instance.deadPlayers -> sender.asLangText("DungeonPlayerStatusDead")
+                        else -> sender.asLangText("DungeonPlayerStatusOnline")
+                    }
+                    val name = player?.name ?: Bukkit.getOfflinePlayer(pUuid).name ?: pUuid.toString().take(8)
+                    sender.sendStringAsComponent(sender.asLangText("DungeonListPlayerEntry", name, status))
+                }
+            }
+        }
+    }
+
+    // ==================== 辅助方法 ====================
+
+    private fun createDungeonAndStart(sender: CommandSender, templateName: String, leader: Player, extraPlayersStr: String?) {
+        val template = KAngelDungeon.dungeonTemplates[templateName]
+        if (template == null) {
+            sender.sendStringAsComponent(sender.asLangText("DungeonTemplateNotExist", templateName))
+            return
+        }
+
+        // 检查权限
+        val permission = template.requiredPermission
+        if (permission != null && !leader.hasPermission(permission)) {
+            sender.sendStringAsComponent(sender.asLangText("DungeonNoPermissionCreate", leader.name, permission))
+            return
+        }
+
+        val minPlayers = template.gameplayGeneral.minPlayers
+        val maxPlayers = template.gameplayGeneral.maxPlayers
+
+        // 收集手动指定的额外玩家
+        var manualPlayers = emptyList<Player>()
+        if (!extraPlayersStr.isNullOrBlank()) {
+            manualPlayers = extraPlayersStr.split(" ").mapNotNull { name ->
+                val p = Bukkit.getPlayerExact(name.trim())
+                if (p != null) {
+                    if (permission != null && !p.hasPermission(permission)) {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonPlayerSkipPermission", p.name, permission))
+                        null
+                    } else p
+                } else null
+            }
+        }
+
+        // 队伍集成：如果队长在队伍中且 allowParty 为 true，自动包含所有在线队员
+        val partyMembers = if (template.gameplayGeneral.allowParty && TeamManager.isEnabled) {
+            val party = TeamManager.getTeam(leader.uniqueId)
+            if (party != null) {
+                party.members.mapNotNull { memberId ->
+                    if (memberId == leader.uniqueId) null
+                    else {
+                        val member = Bukkit.getPlayer(memberId)
+                        if (member != null && member.isOnline) {
+                            if (permission != null && !member.hasPermission(permission)) {
+                                sender.sendStringAsComponent(sender.asLangText("DungeonMemberSkipPermission", member.name, permission))
+                                null
+                            } else member
+                        } else null
+                    }
+                }
+            } else emptyList()
+        } else emptyList()
+
+        // 合并所有玩家（leader + 队伍成员 + 手动指定），去重
+        val allExtra = (partyMembers + manualPlayers).distinct()
+        val totalPlayers = 1 + allExtra.size
+
+        // 检查人数限制
+        if (totalPlayers < minPlayers) {
+            sender.sendStringAsComponent(sender.asLangText("DungeonMinPlayers", minPlayers.toString(), totalPlayers.toString()))
+            return
+        }
+        if (totalPlayers > maxPlayers) {
+            sender.sendStringAsComponent(sender.asLangText("DungeonMaxPlayers", maxPlayers.toString(), totalPlayers.toString()))
+            return
+        }
+
+        val players = mutableListOf(leader)
+        players.addAll(allExtra)
+        val dungeonUUID = DungeonHelper.createDungeon(templateName, players, leader, emptyMap()) { uuid ->
+            val instance = KAngelDungeon.dungeonInstances[uuid]
+            if (instance != null) {
+                val template = instance.getTemplate()
+                val prepTime = template?.preparationTime ?: 0.0
+                if (prepTime > 0 && instance.isPreparing()) {
+                    // 有准备时间：由 tick 倒计时自动开始，这里只报告成功
+                    sender.sendStringAsComponent(sender.asLangText("DungeonCreateSuccess", templateName))
+                } else {
+                    // 无准备时间或已错过 PREPARING 状态：立即开始或确认已开始
+                    if (instance.start() || instance.state == DungeonState.ACTIVE) {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonCreateSuccess", templateName))
+                    } else {
+                        sender.sendStringAsComponent(sender.asLangText("DungeonCreateFailed", templateName))
+                    }
+                }
+            } else {
+                sender.sendStringAsComponent(sender.asLangText("DungeonCreateSuccessNoStart", templateName))
+            }
+        }
+        if (dungeonUUID == null) {
+            sender.sendStringAsComponent(sender.asLangText("DungeonCreateFailed", templateName))
         }
     }
 }

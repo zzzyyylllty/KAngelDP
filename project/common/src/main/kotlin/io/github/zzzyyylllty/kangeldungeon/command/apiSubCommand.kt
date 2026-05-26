@@ -3,7 +3,6 @@ package io.github.zzzyyylllty.kangeldungeon.command
 import io.github.zzzyyylllty.kangeldungeon.function.kether.runKether
 import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
-import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import taboolib.common.platform.command.CommandBody
@@ -13,6 +12,7 @@ import taboolib.common.platform.command.mainCommand
 import taboolib.common.platform.command.player
 import taboolib.common.platform.command.subCommand
 import taboolib.common.platform.function.submitAsync
+import taboolib.platform.util.asLangText
 
 @CommandHeader(
     name = "kangeldungeonapi",
@@ -41,8 +41,6 @@ object ApiCommand {
         dynamic("content") {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
-                    val mm = MiniMessage.miniMessage()
-                    // 获取参数的值
                     val content = context["content"]
                     sender.sendStringAsComponent(content) }
             }
@@ -55,12 +53,11 @@ object ApiCommand {
         dynamic("script") {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
-                    val mm = MiniMessage.miniMessage()
                     // 获取参数的值
-                    val content = context["script"]
+                    val content = context["script"].toString()
                     val ret = runKether(listOf(content), sender)
-                    sender.sendStringAsComponent("<yellow>Kether: <gray>$content")
-                    sender.sendStringAsComponent("<yellow>Return: <gray>${ret.get()}") }
+                    sender.sendStringAsComponent(sender.asLangText("ApiKether", content))
+                    sender.sendStringAsComponent(sender.asLangText("ApiReturn", ret.get().toString())) }
             }
         }
     }
@@ -73,12 +70,10 @@ object ApiCommand {
         dynamic("script") {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
-                    val mm = MiniMessage.miniMessage()
-                    // 获取参数的值
-                    val content = context["script"]
+                    val content = context["script"].toString()
                     val ret = GraalJsUtil.directEval(content, mapOf("player" to sender))
-                    sender.sendStringAsComponent("<yellow>Kether: <gray>$content")
-                    sender.sendStringAsComponent("<yellow>Return: <gray>${ret}") }
+                    sender.sendStringAsComponent(sender.asLangText("ApiJs", content))
+                    sender.sendStringAsComponent(sender.asLangText("ApiReturn", ret.toString())) }
             }
         }
     }
@@ -91,13 +86,15 @@ object ApiCommand {
                 execute<CommandSender> { sender, context, argument ->
                     submitAsync {
                         val tabooPlayer = context.player("player")
-                        val bukkitPlayer = tabooPlayer.castSafely<Player>() as CommandSender
-                        val mm = MiniMessage.miniMessage()
+                        val bukkitPlayer = tabooPlayer.castSafely<Player>() ?: run {
+                            sender.sendStringAsComponent(sender.asLangText("ApiPlayerInvalid"))
+                            return@submitAsync
+                        }
                         // 获取参数的值
-                        val content = context["script"]
+                        val content = context["script"].toString()
                         val ret = runKether(listOf(content), bukkitPlayer)
-                        sender.sendStringAsComponent("<yellow>Kether: <gray>$content")
-                        sender.sendStringAsComponent("<yellow>Return: <gray>${ret.get()}") }
+                        sender.sendStringAsComponent(sender.asLangText("ApiKether", content))
+                        sender.sendStringAsComponent(sender.asLangText("ApiReturn", ret.get().toString())) }
                 }
             }
         }
@@ -108,9 +105,7 @@ object ApiCommand {
         dynamic("script") {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
-                    val mm = MiniMessage.miniMessage()
-                    // 获取参数的值
-                    val content = context["script"]
+                    val content = context["script"].toString()
                     runKether(listOf(content), sender) }
             }
         }
@@ -124,10 +119,11 @@ object ApiCommand {
                 execute<CommandSender> { sender, context, argument ->
                     submitAsync {
                         val tabooPlayer = context.player("player")
-                        val bukkitPlayer = tabooPlayer.castSafely<Player>() as CommandSender
-                        val mm = MiniMessage.miniMessage()
-                        // 获取参数的值
-                        val content = context["script"]
+                        val bukkitPlayer = tabooPlayer.castSafely<Player>() ?: run {
+                            sender.sendStringAsComponent(sender.asLangText("ApiPlayerInvalid"))
+                            return@submitAsync
+                        }
+                        val content = context["script"].toString()
                         runKether(listOf(content), bukkitPlayer)
                     }
                 }

@@ -1,0 +1,8 @@
+sampleTimerPlan:
+  trigger: BEGIN # usable trigger: PREPARE BEGIN END FAIL ...
+  delay: 200
+  period: 200
+  async: true
+  agent:
+    onRun: |-
+      instance.sendMessageToAllPlayers("10 seconds passed");

@@ -16,11 +16,17 @@ import taboolib.module.nms.setItemTag
 import java.time.Duration
 
 object PlayerUtil {
+    @Suppress("DEPRECATION")
+    private fun getPotionEffectType(type: String): PotionEffectType? {
+        return PotionEffectType.getByName(type)
+    }
+
     fun addPotionEffect(player: Player, type: String, duration: Int = 30, amplifier: Int = 0, ambient: Boolean = true, particles: Boolean = true, icon: Boolean = true) {
+        val effectType = getPotionEffectType(type) ?: return
         submit {
             player.addPotionEffect(
                 PotionEffect(
-                    PotionEffectType.getByName(type)!!,
+                    effectType,
                     duration,
                     amplifier,
                     ambient,
@@ -31,10 +37,11 @@ object PlayerUtil {
         }
     }
     fun addPotionEffect(player: Player, type: String, duration: Int = 30, amplifier: Int = 0) {
+        val effectType = getPotionEffectType(type) ?: return
         submit {
             player.addPotionEffect(
                 PotionEffect(
-                    PotionEffectType.getByName(type)!!,
+                    effectType,
                     duration,
                     amplifier
                 )
@@ -42,10 +49,9 @@ object PlayerUtil {
         }
     }
     fun removePotionEffect(player: Player, type: String) {
+        val effectType = getPotionEffectType(type) ?: return
         submit {
-            player.removePotionEffect(
-                PotionEffectType.getByName(type)!!
-            )
+            player.removePotionEffect(effectType)
         }
     }
     fun showTitle(player: Player, title: Component, subTitle: Component, durationIn: Int = 30, duration: Int = 30, durationOut: Int = 30) {

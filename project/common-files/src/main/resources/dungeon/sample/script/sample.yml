@@ -1,9 +1,77 @@
+# =============================================
+# Sample Dungeon Script / 示例地牢脚本
+# These scripts are run via instance.runScript("sample")
+# 这些脚本通过 instance.runScript("sample") 调用
+# =============================================
+
 sample:
+  # onRun: main execution phase / 主执行阶段
   onRun: |-
     instance.sendMessageToAllPlayers("<yellow>Hello World!")
     instance.sendActionBarToAllPlayers("<green>Dungeon starting...</green>")
     instance.setWorldTime(1000)
+
+    // [Target Selector / 目标选择器] Count and notify high-level players / 统计高等级玩家
+    var allPlayers = instance.getAllPlayers();
+    var count = instance.getTargetCount("@all[level>=5]");
+    instance.sendMessageToAllPlayers("<aqua>High-level players: " + count + "</aqua>");
+
+    // [Single Player / 单玩家操作] Buff the first player in selection / 给第一个选中的玩家加速
+    var first = instance.selectFirstTarget("@all[]");
+    if (first) {
+      instance.setPlayerWalkSpeed(first.getName(), 0.3);
+      instance.setPlayerHealth(first.getName(), first.getMaxHealth());
+    }
+
+    // [Particle / 粒子效果] Spawn particles at location / 在指定位置生成粒子
+    instance.spawnParticle("FLAME", 100.0, 64.0, 200.0, 50, 1.0, 1.0, 1.0, 0.1);
+    // [Particle Line / 粒子连线] Draw a line of particles between two points / 在两点间绘制粒子线
+    instance.spawnParticleLine("END_ROD", 100.0, 64.0, 200.0, 110.0, 70.0, 200.0, 20);
+
+    // [Meta / 元数据] Record script execution / 记录脚本执行状态
+    instance.setMeta("script_run", true);
+    instance.setMeta("start_time", System.currentTimeMillis());
+
+  # onPost: runs after onRun completes / onRun 完成后执行
   onPost: |-
     instance.sendMessageToAllPlayers("<green>Hello World Running Completed.")
     instance.healAllPlayers()
     instance.clearAllPlayersEffects()
+
+    // [Potion / 药水效果] Apply jump boost to all players, then remove from specific player
+    // 给所有玩家跳跃提升，然后移除指定玩家的效果
+    instance.applyPotionEffectToAllPlayers("JUMP_BOOST", 60, 1);
+    instance.removePotionEffectFromPlayer("Notch", "JUMP_BOOST");
+
+    // [Scoreboard / 计分板标签] Tag management example / 标签管理示例
+    instance.addScoreboardTagToAllPlayers("script_done");
+    instance.removeScoreboardTagFromAllPlayers("script_done");
+
+    // [Sound / 音效] Play sound at a specific location / 在指定位置播放音效
+    instance.playSoundAt("entity_experience_orb_pickup", 100.0, 64.0, 100.0, 1.0, 1.0);
+
+# =============================================
+# Wave Control Script / 波次控制脚本
+# Example: managing wave-based combat using meta + target selectors
+# 示例：使用元数据和目标选择器管理波次战斗
+# =============================================
+wave_control:
+  onRun: |-
+    // [Meta / 元数据] Get current wave number, default to 1 / 获取当前波次，默认为1
+    var currentWave = instance.getMetaAsInt("wave") || 1;
+    instance.sendTitleToAllPlayers("<red>Wave " + currentWave + "</red>", "<yellow>Fight!</yellow>");
+
+    // [Potion / 药水效果] Scale buffs based on wave number / 根据波次给予不同 Buff
+    if (currentWave >= 3) {
+      instance.applyPotionEffectToAllPlayers("STRENGTH", 120, 0);
+    }
+    if (currentWave >= 5) {
+      instance.applyPotionEffectToAllPlayers("RESISTANCE", 120, 0);
+    }
+
+    // [Visual / 视觉效果] Particle line + sound to signal wave start / 粒子线+音效提示波次开始
+    instance.spawnParticleLine("FLAME", 100.0, 64.0, 100.0, 110.0, 64.0, 110.0, 30);
+    instance.broadcastSound("entity_wither_spawn", 2.0, 0.5);
+
+    // [Meta / 元数据] Increment wave counter / 递增波次计数
+    instance.addMeta("wave", currentWave + 1);

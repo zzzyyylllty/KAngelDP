@@ -7,6 +7,12 @@ import io.github.zzzyyylllty.kangeldungeon.function.javascript.EventUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.ItemStackUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.PlayerUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.ThreadUtil
+import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper
+import io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager
+import io.github.zzzyyylllty.kangeldungeon.util.monster.MonsterManager
+import io.github.zzzyyylllty.kangeldungeon.util.obstacle.ObstacleManager
+import io.github.zzzyyylllty.kangeldungeon.util.plan.PlanManager
+import io.github.zzzyyylllty.kangeldungeon.util.region.RegionManager
 import io.github.zzzyyylllty.kangeldungeon.function.kether.evalKether
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
 import io.github.zzzyyylllty.kangeldungeon.util.TargetSelectorHelper
@@ -27,6 +33,22 @@ import javax.script.SimpleBindings
 
 var defaultData = LinkedHashMap<String, Any?>()
 
+/**
+ * 供 JS 脚本安全调用的 Bukkit 方法包装。
+ * 使用 open class + instance 避免 Kotlin object 的 GraalJS 互操作问题。
+ */
+open class ScriptBukkit {
+    fun broadcast(component: Any?) {
+        if (component is net.kyori.adventure.text.Component) {
+            org.bukkit.Bukkit.broadcast(component)
+        } else if (component != null) {
+            org.bukkit.Bukkit.broadcast(net.kyori.adventure.text.Component.text(component.toString()))
+        }
+    }
+}
+
+val ScriptBukkitInstance = ScriptBukkit()
+
 @Awake(LifeCycle.ENABLE)
 fun registerExternalData() {
     defaultData.putAll(
@@ -43,9 +65,15 @@ fun registerExternalData() {
             "DungeonAPI" to KAngelDungeonAPI::class.java,
             "Math" to Math::class.java,
             "System" to System::class.java,
-            "Bukkit" to Bukkit::class.java,
+            "Bukkit" to ScriptBukkitInstance,
             "Gson" to Gson::class.java,
-            "TargetSelectorHelper" to TargetSelectorHelper
+            "TargetSelectorHelper" to TargetSelectorHelper,
+            "ObstacleManager" to ObstacleManager,
+            "MonsterManager" to MonsterManager,
+            "RegionManager" to RegionManager,
+            "PlanManager" to PlanManager,
+            "KitManager" to KitManager,
+            "DungeonHelper" to DungeonHelper
         ))
     val event = KAngelDungeonCustomScriptDataLoadEvent(defaultData)
     event.call()

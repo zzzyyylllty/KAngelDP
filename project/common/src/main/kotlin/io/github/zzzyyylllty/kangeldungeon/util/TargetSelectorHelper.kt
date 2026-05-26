@@ -30,8 +30,32 @@ enum class ComparisonOperator {
 
 data class TargetSelector(
     val type: SelectorType,
-    val conditions: List<TargetCondition>
+    val root: ConditionExpression?
 )
+
+// ==================== 表达式树 ====================
+
+/**
+ * 条件表达式 - 支持 &&、||、括号
+ */
+sealed class ConditionExpression {
+    abstract fun matches(player: Player): Boolean
+}
+
+/** 叶子节点 - 单个条件 */
+class ConditionLeaf(val condition: TargetCondition) : ConditionExpression() {
+    override fun matches(player: Player): Boolean = condition.matches(player)
+}
+
+/** AND 表达式 (&&) */
+class AndExpr(val left: ConditionExpression, val right: ConditionExpression) : ConditionExpression() {
+    override fun matches(player: Player): Boolean = left.matches(player) && right.matches(player)
+}
+
+/** OR 表达式 (||) */
+class OrExpr(val left: ConditionExpression, val right: ConditionExpression) : ConditionExpression() {
+    override fun matches(player: Player): Boolean = left.matches(player) || right.matches(player)
+}
 
 sealed class TargetCondition {
 
@@ -116,13 +140,13 @@ sealed class TargetCondition {
 
 object TargetSelectorHelper {
 
-    private val SELECTOR_REGEX = Regex("^@(all|p|r)\\{(.*)\$")
+    private val SELECTOR_REGEX = Regex("""^@(all|p|r)(?:\[(.*)])?$""")
     private val OPERATOR_REGEX = Regex("\\s*(>=|<=|>|<|==|=)\\s*")
 
     /**
      * 解析并求值目标选择器
      * @param instance 当前地牢实例
-     * @param line 选择器字符串，如 "@all{papi:player_health>=30&&distance:1,2,3=1..6}"
+     * @param line 选择器字符串，如 "@all[papi:player_health>=30&&distance:1,2,3=1..6]"
      * @return 匹配的玩家列表
      */
     fun parseLine(instance: DungeonInstance, line: String): List<Player> {
@@ -148,32 +172,25 @@ object TargetSelectorHelper {
 
         val conditionsRaw = match.groupValues[2].trim()
         if (conditionsRaw.isEmpty()) {
-            return TargetSelector(type, emptyList())
+            return TargetSelector(type, null)
         }
 
-        val conditionStrings = conditionsRaw.split("&&")
-        val conditions = mutableListOf<TargetCondition>()
-
-        for (raw in conditionStrings) {
-            val trimmed = raw.trim()
-            if (trimmed.isEmpty()) continue
-            val condition = parseCondition(trimmed)
-            if (condition != null) {
-                conditions.add(condition)
-            } else {
-                warningL("WarningTargetSelectorConditionInvalid", trimmed)
-            }
+        val root = parseExpression(conditionsRaw)
+        if (root == null) {
+            warningL("WarningTargetSelectorConditionInvalid", conditionsRaw)
+            return TargetSelector(type, null)
         }
 
-        return TargetSelector(type, conditions)
+        return TargetSelector(type, root)
     }
 
     /**
      * 对预解析的 TargetSelector 求值
      */
     fun evaluate(instance: DungeonInstance, selector: TargetSelector): List<Player> {
+        val root = selector.root
         val candidates = instance.getOnlinePlayers().filter { player ->
-            selector.conditions.all { it.matches(player) }
+            root?.matches(player) ?: true
         }
 
         return when (selector.type) {
@@ -190,7 +207,75 @@ object TargetSelectorHelper {
         }
     }
 
-    // ==================== 条件解析 ====================
+    // ==================== 表达式解析 (&&、||、括号) ====================
+
+    /** 表达式分词: 匹配 ||、&&、() 或非特殊字符序列 */
+    private val EXPR_TOKEN_REGEX = Regex("""\|\||&&|[()]|[^()\s&|]+""")
+
+    /**
+     * 解析条件表达式（递归下降）
+     * 优先级: && > ||
+     * 支持括号分组
+     *
+     * 语法:
+     *   expression -> or_expr
+     *   or_expr    -> and_expr ("||" and_expr)*
+     *   and_expr   -> primary ("&&" primary)*
+     *   primary    -> "(" expression ")" | condition_string
+     */
+    private fun parseExpression(input: String): ConditionExpression? {
+        val tokens = EXPR_TOKEN_REGEX.findAll(input).map { it.value }.toList()
+        if (tokens.isEmpty()) return null
+
+        val ref = intArrayOf(0)
+        val result = parseOrExpr(tokens, ref)
+        // 确保所有 token 都被消费完（防止结尾多余内容）
+        if (ref[0] != tokens.size) return null
+        return result
+    }
+
+    /** 解析 or_expr: and_expr ("||" and_expr)* */
+    private fun parseOrExpr(tokens: List<String>, pos: IntArray): ConditionExpression? {
+        var left = parseAndExpr(tokens, pos) ?: return null
+        while (pos[0] < tokens.size && tokens[pos[0]] == "||") {
+            pos[0]++
+            val right = parseAndExpr(tokens, pos) ?: return null
+            left = OrExpr(left, right)
+        }
+        return left
+    }
+
+    /** 解析 and_expr: primary ("&&" primary)* */
+    private fun parseAndExpr(tokens: List<String>, pos: IntArray): ConditionExpression? {
+        var left = parsePrimary(tokens, pos) ?: return null
+        while (pos[0] < tokens.size && tokens[pos[0]] == "&&") {
+            pos[0]++
+            val right = parsePrimary(tokens, pos) ?: return null
+            left = AndExpr(left, right)
+        }
+        return left
+    }
+
+    /** 解析 primary: "(" expression ")" | condition_string */
+    private fun parsePrimary(tokens: List<String>, pos: IntArray): ConditionExpression? {
+        if (pos[0] >= tokens.size) return null
+
+        val token = tokens[pos[0]]
+        if (token == "(") {
+            pos[0]++ // 跳过 '('
+            val expr = parseOrExpr(tokens, pos)
+            if (expr == null || pos[0] >= tokens.size || tokens[pos[0]] != ")") return null
+            pos[0]++ // 跳过 ')'
+            return expr
+        }
+
+        if (token == ")" || token == "&&" || token == "||") return null
+
+        // 条件字符串 -> 尝试解析为具体条件
+        pos[0]++
+        val condition = parseCondition(token) ?: return null
+        return ConditionLeaf(condition)
+    }
 
     private fun parseCondition(raw: String): TargetCondition? {
         return try {
@@ -308,7 +393,7 @@ object TargetSelectorHelper {
             ComparisonOperator.LE -> playerValue <= conditionValue
             ComparisonOperator.GT -> playerValue > conditionValue
             ComparisonOperator.LT -> playerValue < conditionValue
-            ComparisonOperator.EQ -> playerValue == conditionValue
+            ComparisonOperator.EQ -> kotlin.math.abs(playerValue - conditionValue) < 1e-10
             ComparisonOperator.RANGE -> false // 数值类型不支持 RANGE
         }
     }

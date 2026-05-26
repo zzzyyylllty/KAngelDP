@@ -9,13 +9,19 @@ display:
 map:
   type: MAP # MAP, SCHEMATIC
   source: testmap
+  spawn:
+    x: 77
+    y: -58
+    z: 191
 meta:
   global:
-    samplemeta: 1
+    sample_meta: 1
   player:
-    samplemeta: 1
+    sample_meta: 1
 gameplay:
   general:
+    TimeLimit: 600
+    PreparationTime: 10
     LeaveOnDeath: false
     adventureMode: true
     MinPlayers: 1
@@ -26,6 +32,17 @@ gameplay:
       required-lives: false
     bannedItems:
       - ENDER_PEARL
+    # Block placement control / 方块放置控制
+    block-place:
+      mode: BLACKLIST          # BLACKLIST / WHITELIST
+      list:
+        - TNT
+        - LAVA_BUCKET
+    # Block breaking control / 方块破坏控制
+    block-break:
+      mode: BLACKLIST          # BLACKLIST / WHITELIST
+      list:
+        - TNT
   commands:
     mode: BLACKLIST
     list:
@@ -44,21 +61,98 @@ vanilla-options:
   durability: true
   items-drop: true
   items-pickup: true
+  spawnpoint: 77 -58 191
 agent:
+  # ============ onCheck / onCheckFail ============
+  # Check if the player can start the dungeon / 检查玩家是否能开始地牢
   onCheck: |-
     player.health >= 10
   onCheckFail: |-
     player.sendMessage(mmUtil.deserialize("<gray>Your health is < 10, dungeon sequence cancelled."))
+
+  # ============ onLeave / onLeaveFail ============
+  # Check if the player can leave the dungeon / 检查玩家能否离开地牢
+  # Return false to prevent leaving / 返回 false 阻止离开
+  onLeave: |-
+    instance.getMetaAsInt("wave") == null || instance.getMetaAsInt("wave") < 3
+  onLeaveFail: |-
+    player.sendMessage(mmUtil.deserialize("<red>You cannot leave during wave 3+!</red>"));
+
+  # ============ onStart ============
+  # Called when the dungeon starts / 地牢开始时调用
   onStart: |-
     Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Started."));
     instance.sendActionBarToAllPlayers("<gold>Prepare for battle!</gold>");
     instance.setWorldTime(1000);
-    instance.setWorldStorm(false)
+    instance.setWorldStorm(false);
+
+    // [Target Selector / 目标选择器] Give buffs to high-level players / 给高等级玩家加 Buff
+    var elites = instance.selectTargets("@all[level>=10]");
+    elites.forEach(function(p) {
+      instance.applyPotionEffectToPlayer(p.getName(), "SPEED", 6000, 1);
+    });
+
+    // [Scoreboard Tags / 计分板标签] Mark all players / 标记所有玩家
+    instance.addScoreboardTagToAllPlayers("in_dungeon");
+
+    // [World / 世界操作] Set difficulty and gamerule / 设置难度和游戏规则
+    instance.setWorldDifficulty("hard");
+    instance.setGameRule("doMobSpawning", "true");
+
+    // [Meta / 元数据] Record start info / 记录开始信息
+    instance.setMeta("wave", 1);
+    instance.setMeta("start_time", System.currentTimeMillis());
+
+  # ============ onComplete ============
+  # Called when the dungeon is completed / 地牢通关时调用
   onComplete: |-
     Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Completed."));
     instance.healAllPlayers();
     instance.executeCommand("say Congratulations!");
-    instance.clearAllPlayersEffects()
+    instance.clearAllPlayersEffects();
+
+    // [Target Selector / 目标选择器] Reward surviving players / 奖励存活玩家
+    var survivors = instance.selectTargets("@all[health>0]");
+    survivors.forEach(function(p) {
+      p.sendMessage(mmUtil.deserialize("<green>You survived!"));
+    });
+
+    // [Meta / 元数据] Record completion time / 记录通关时间
+    var elapsed = (System.currentTimeMillis() - instance.getMeta("start_time")) / 1000;
+    instance.setMeta("completion_time", elapsed);
+
+    // [Scoreboard / 计分板] Clean up tags / 清除标签
+    instance.removeScoreboardTagFromAllPlayers("in_dungeon");
+
+    // [World / 世界操作] Restore world border / 恢复边界
+    instance.setWorldBorder(0.0, 0.0, 600.0);
+
+  # ============ onFail ============
+  # Called when the dungeon is failed / 地牢失败时调用
   onFail: |-
     Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Failed."));
-    instance.respawnAllDeadPlayers()
+    instance.respawnAllDeadPlayers();
+
+    // [Target Selector / 目标选择器] Notify dead players / 通知死亡玩家
+    var deads = instance.selectTargets("@all[health<=0]");
+    deads.forEach(function(p) {
+      p.sendMessage(mmUtil.deserialize("<red>Better luck next time!</red>"));
+    });
+    instance.removeScoreboardTagFromAllPlayers("in_dungeon");
+
+  # ============ onWaveStart (custom / 自定义触发器) ============
+  # Example: called by dungeon script to start a new wave / 由地牢脚本调用以开始新波次
+  onWaveStart: |-
+    var waveNum = instance.getMetaAsInt("wave");
+
+    // [Title / 标题] Show wave number / 显示波次数
+    instance.sendTitleToAllPlayers("<red>Wave " + waveNum + "</red>", "<yellow>Get ready!</yellow>", 10, 40, 10);
+
+    // [Potion / 药水] Give resistance at wave start / 波次开始时给予抗性
+    instance.applyPotionEffectToAllPlayers("RESISTANCE", 60, 0);
+
+    // [Meta / 元数据] Increment wave counter / 递增波次计数
+    instance.addMeta("wave", 1);
+
+    // [Sound / 音效] Play howl at spawn point / 在出生点播放心跳声
+    instance.playSoundAt("entity_wolf_howl", 100.0, 64.0, 200.0, 2.0, 1.0);

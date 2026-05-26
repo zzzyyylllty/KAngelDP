@@ -116,7 +116,7 @@ object DataUtil {
     
     fun getAllDataRaw(player: Player): Map<String, String> {
         val container = player.getDataContainer()
-        return container.source
+        return container.source.toMap()
     }
 
     fun getAllCooldownLong(player: Player): Map<String, Long> {
@@ -210,8 +210,8 @@ object DataUtil {
 
     fun cleanupCooldown(player: Player) {
         val container = player.getDataContainer()
-        container.source.filter { (key, value) -> key.startsWith("cooldown.") }.forEach {
-            if ((container["cooldown.${it.key}"]?.toLongOrNull() ?: 0L) <= Instant.now().toEpochMilli()) container.delete(it.key)
+        container.source.filter { (key, value) -> key.startsWith("cooldown.") }.forEach { (key, value) ->
+            if ((value.toLongOrNull() ?: 0L) <= Instant.now().toEpochMilli()) container.delete(key)
         }
     }
 }

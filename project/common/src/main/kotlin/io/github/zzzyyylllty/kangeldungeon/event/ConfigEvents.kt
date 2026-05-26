@@ -1,5 +1,6 @@
 package io.github.zzzyyylllty.kangeldungeon.event
 
+import org.bukkit.event.player.PlayerItemConsumeEvent
 import taboolib.platform.type.BukkitProxyEvent
 
 class kangeldungeonReloadEvent() : BukkitProxyEvent()
@@ -12,3 +13,4 @@ class kangeldungeonReloadEvent() : BukkitProxyEvent()
 class KAngelDungeonCustomScriptDataLoadEvent(
     var defaultData: LinkedHashMap<String, Any?>
 ) : BukkitProxyEvent()
+

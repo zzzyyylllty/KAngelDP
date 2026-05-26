@@ -4,9 +4,15 @@ import io.github.zzzyyylllty.kangeldungeon.data.*
 import io.github.zzzyyylllty.kangeldungeon.data.load.loadDungeonFiles
 import io.github.zzzyyylllty.kangeldungeon.event.DungeonTickEvent
 import io.github.zzzyyylllty.kangeldungeon.logger.*
+import io.github.zzzyyylllty.kangeldungeon.team.TeamManager
+import io.github.zzzyyylllty.kangeldungeon.team.TeamProvider
+import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
 import io.github.zzzyyylllty.kangeldungeon.util.KAngelDungeonLocalDependencyHelper
 import io.github.zzzyyylllty.kangeldungeon.util.dependencies
 import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper
+import io.github.zzzyyylllty.kangeldungeon.util.monster.MonsterManager
+import io.github.zzzyyylllty.kangeldungeon.util.obstacle.ObstacleManager
+import io.github.zzzyyylllty.kangeldungeon.util.region.RegionManager
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.graalvm.polyglot.Source
@@ -19,10 +25,12 @@ import taboolib.common.platform.function.console
 import taboolib.common.platform.function.info
 import taboolib.common.platform.function.severe
 import taboolib.common.platform.function.submit
+import taboolib.common.platform.service.PlatformExecutor
 import taboolib.expansion.setupPlayerDatabase
 import taboolib.module.configuration.Config
 import taboolib.module.configuration.Configuration
 import taboolib.module.database.getHost
+import taboolib.module.lang.asLangText
 import taboolib.module.kether.KetherShell
 import taboolib.module.lang.Language
 import taboolib.module.lang.event.PlayerSelectLocaleEvent
@@ -35,7 +43,7 @@ import javax.script.CompiledScript
 import kotlin.jvm.Volatile
 
 
-object KAngelDungeon : Plugin() {
+object KAngelDungeon : Plugin(), KAngelDungeonAPI {
 
 
     @Config("config.yml")
@@ -44,27 +52,67 @@ object KAngelDungeon : Plugin() {
     val plugin by lazy { this }
     val dataFolder by lazy { nativeDataFolder() }
     val console by lazy { console() }
-    val consoleSender by lazy { console() as? CommandSender ?: error("Console not available") }
+    val consoleSender by lazy { console.castSafely<CommandSender>() ?: let {
+        severe("Failed to cast console to CommandSender, using fallback")
+        Bukkit.getConsoleSender()
+    } }
     val host by lazy { config.getHost("database") }
     val dataSource by lazy { host.createDataSource() }
     val gjsScriptCache by lazy { ConcurrentHashMap<String, Source?>() }
 
     val dungeonInstances = ConcurrentHashMap<UUID, DungeonInstance>()
+    /** worldName → instanceUuid 反向索引，用于 O(1) 查找实例 */
+    val worldInstanceIndex = ConcurrentHashMap<String, UUID>()
     val dungeonTemplates = ConcurrentHashMap<String, DungeonTemplate>()
     val dungeonScripts = ConcurrentHashMap<String, ConcurrentHashMap<String, DungeonScript>>()
+    // Per-dungeon configs: dungeonName -> (configId -> config)
+    val dungeonObstacleConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, ObstacleConfig>>()
+    val dungeonMonsterConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, MonsterConfig>>()
+    val dungeonInteractConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, InteractConfig>>()
+    val dungeonPlanConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, Plan>>()
+    val dungeonRegionConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, RegionConfig>>()
+    val dungeonKitConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, KitConfig>>()
+    // Global fallback (backward compat)
+    val obstacleConfigs = ConcurrentHashMap<String, ObstacleConfig>()
+    val monsterConfigs = ConcurrentHashMap<String, MonsterConfig>()
     val blockRegenMap = ConcurrentHashMap<String, MutableSet<UUID>>()
 
     val dateTimeFormatter: DateTimeFormatter by lazy { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss") }
     @Volatile
-    var devMode = true
+    var devMode = false
+    @Volatile
+    var maintenanceMode = false
+    /** 重载配置中标志，防止 reload 期间 tick 读取不一致数据 */
+    @Volatile
+    var isReloading = false
+    /** 被封禁的玩家 (lowercase name -> reason) */
+    val blacklistedPlayers = ConcurrentHashMap<String, String>()
     val ketherScriptCache by lazy { ConcurrentHashMap<String, KetherShell.Cache>() }
     val jsScriptCache by lazy { ConcurrentHashMap<String, CompiledScript>() }
+
+    // Tick任务引用，用于生命周期管理和清理
+    private var tickTask: PlatformExecutor.PlatformTask? = null
+
+    // === KAngelDungeonAPI Implementation ===
+
+    override val teamManager: TeamManager get() = TeamManager
+
+    override fun registerTeamProvider(provider: TeamProvider) {
+        TeamManager.registerProvider(provider)
+    }
+
+    override fun getTeamProvider(): TeamProvider? = TeamManager.getProvider()
 
 
 
     override fun onLoad() {
         if (config.getBoolean("database.enable", false)) {
-            setupPlayerDatabase(config.getConfigurationSection("database")!!)
+            val dbSection = config.getConfigurationSection("database")
+            if (dbSection != null) {
+                setupPlayerDatabase(dbSection)
+            } else {
+                setupPlayerDatabase(File("${config.getString("database.filename", "data")}.db"))
+            }
         } else {
             setupPlayerDatabase(File("${config.getString("database.filename", "data")}.db"))
         }
@@ -76,13 +124,46 @@ object KAngelDungeon : Plugin() {
         Language.enableSimpleComponent = true
         reloadCustomConfig()
 
+        // 初始化队伍系统
+        TeamManager.initialize()
+
         // 启动地牢生命周期Tick（每秒）
         startDungeonTick()
 
+        // 清理残余地牢世界（延迟执行确保配置已加载）
+        if (config.getBoolean("cleanup-residual-worlds", true)) {
+            submit(delay = 40L) {
+                cleanupResidualWorlds()
+            }
+        }
     }
 
     override fun onDisable() {
         infoL("Disable")
+
+        // 取消地牢生命周期Tick
+        tickTask?.cancel()
+        tickTask = null
+
+        // 清理所有活跃地牢实例（同步删除世界文件夹，确保关闭时清理）
+        val instances = dungeonInstances.values.toList()
+        for (instance in instances) {
+            try {
+                instance.stopAllPlans()
+                RegionManager.clearWorld(instance.worldName)
+                DungeonHelper.unloadDungeonWorld(instance, syncDelete = true)
+            } catch (e: Exception) {
+                severe(e.message ?: "Failed to cleanup dungeon instance: ${instance.uuid}")
+                e.printStackTrace()
+            }
+        }
+        dungeonInstances.clear()
+
+        // 清理队伍系统
+        TeamManager.unregisterProvider()
+
+        // 关闭所有线程的 GraalJS Context，释放原生内存
+        GraalJsUtil.closeCurrentContext()
     }
     /*
     fun compat() {
@@ -98,39 +179,81 @@ object KAngelDungeon : Plugin() {
      * - COMPLETED/FAILED 状态：60秒后自动清理
      */
     private fun startDungeonTick() {
-        submit(period = 20L, delay = 20L) {
+        // 取消已存在的tick任务（防止重复创建）
+        tickTask?.cancel()
+        tickTask = submit(period = 20L, delay = 20L) {
+            // 重载配置期间跳过 tick，避免读取不一致数据
+            if (isReloading) return@submit
+
             val toRemove = mutableListOf<UUID>()
             val now = System.currentTimeMillis()
 
-            for ((uuid, instance) in dungeonInstances) {
+            // 快照实例集，避免迭代过程中其他线程修改 dungeonInstances 导致竞态
+            val snapshot = dungeonInstances.entries.map { it.key to it.value }
+
+            for ((uuid, instance) in snapshot) {
                 when (instance.state) {
                     DungeonState.PREPARING -> {
                         // 触发Tick事件（供外部监听）
                         DungeonTickEvent(instance).call()
 
-                        // 检查准备时间是否已到，到时自动开始
                         val template = dungeonTemplates[instance.templateName]
                         if (template != null) {
                             val prepTime = template.preparationTime ?: 0.0
-                            if (prepTime > 0 && now - instance.createdAt >= prepTime * 1000) {
-                                instance.start()
+                            if (prepTime > 0) {
+                                val elapsed = (now - instance.createdAt) / 1000.0
+                                val remaining = (prepTime - elapsed).coerceAtLeast(0.0)
+                                val remainingInt = remaining.toInt()
+
+                                // 准备阶段通知
+                                if (prepTime > 0 && config.getBoolean("preparation.notify.enabled", true)) {
+                                    val interval = config.getInt("preparation.notify.interval", 5).coerceAtLeast(1)
+                                    val countdownLast = config.getInt("preparation.notify.countdown-last-seconds", 10).coerceAtLeast(1)
+                                    val mode = config.getString("preparation.notify.mode", "title") ?: "title"
+
+                                    val shouldNotify = remainingInt != instance.lastPrepNotifyRemaining &&
+                                        (remainingInt <= countdownLast || remainingInt % interval == 0 || instance.lastPrepNotifyRemaining == -1)
+
+                                    if (shouldNotify) {
+                                        instance.lastPrepNotifyRemaining = remainingInt
+                                        val message = console.asLangText("PrepNotifyCountdown", remainingInt.toString())
+                                        when (mode.lowercase()) {
+                                            "actionbar" -> instance.sendActionBarToAllPlayers(message)
+                                            "chat" -> instance.sendMessageToAllPlayers(message)
+                                            "title" -> instance.sendTitleToAllPlayers(message, "", 5, 30, 10)
+                                            else -> instance.sendTitleToAllPlayers(message, "", 5, 30, 10)
+                                        }
+                                    }
+                                }
+
+                                // 准备时间到，自动开始
+                                if (now - instance.createdAt >= prepTime * 1000 && instance.worldReady) {
+                                    instance.start()
+                                }
+                            } else {
+                                // 无准备时间，立即开始
+                                if (instance.worldReady && instance.lastPrepNotifyRemaining == -1) {
+                                    instance.start()
+                                }
                             }
                         }
                     }
                     DungeonState.ACTIVE -> {
                         DungeonTickEvent(instance).call()
 
+                        // 怪物组 tick（自动重生等）
+                        MonsterManager.tickDungeonMonsters(instance)
+
                         val template = dungeonTemplates[instance.templateName]
                         if (template != null) {
-                            // 检查超时
+                            // 超时检查：优先触发
                             if (instance.isTimedOut(template)) {
                                 instance.fail()
-                                instance.sendMessageToAllPlayers("<red>地牢超时！</red>")
-                            }
-                            // 检查是否所有活跃玩家都已死亡
-                            if (instance.areAllPlayersDead()) {
+                                instance.sendMessageToAllPlayers(console.asLangText("DungeonTimeout"))
+                            } else if (instance.areAllPlayersDead()) {
+                                // 使用 else if 防止超时和全灭同时触发导致重复消息
                                 instance.fail()
-                                instance.sendMessageToAllPlayers("<red>全员阵亡，地牢失败！</red>")
+                                instance.sendMessageToAllPlayers(console.asLangText("DungeonAllDead"))
                             }
                         }
                     }
@@ -146,38 +269,134 @@ object KAngelDungeon : Plugin() {
 
             // 清理已结束的地牢世界
             toRemove.forEach { uuid ->
-                dungeonInstances[uuid]?.let { instance ->
-                    // 传送剩余玩家回主世界
-                    instance.getOnlinePlayers().forEach { player ->
-                        try {
-                            player.teleport(Bukkit.getWorlds()[0].spawnLocation)
-                        } catch (_: Exception) {}
+                try {
+                    dungeonInstances[uuid]?.let { instance ->
+                        instance.stopAllPlans()
+                        RegionManager.clearWorld(instance.worldName)
+                        DungeonHelper.unloadDungeonWorld(instance)
                     }
-                    DungeonHelper.unloadDungeonWorld(instance)
+                } catch (e: Exception) {
+                    severe("Error during dungeon cleanup: ${e.message}")
+                    e.printStackTrace()
                 }
             }
         }
     }
 
-    fun reloadCustomConfig(async: Boolean = true) {
+    fun reloadCustomConfig(async: Boolean = true, onComplete: (() -> Unit)? = null) {
         submit(async) {
+            try {
+                config.reload()
+                devMode = config.getBoolean("debug", false)
 
-            config.reload()
-            devMode = config.getBoolean("debug",false)
+                ketherScriptCache.clear()
+                jsScriptCache.clear()
+                gjsScriptCache.clear()
 
-            ketherScriptCache.clear()
-            jsScriptCache.clear()
+                // 标记重载中，tick 会跳过此期间的循环
+                isReloading = true
 
-            dungeonTemplates.clear()
-            dungeonScripts.clear()
+                // 在 async 块内检查活跃实例，避免调用线程和异步线程间的竞态
+                val hasActiveInstances = dungeonInstances.values.any { it.state == DungeonState.PREPARING || it.state == DungeonState.ACTIVE }
+                if (hasActiveInstances) {
+                    warningL("DungeonActiveReloadConfigWarn")
+                }
 
-            loadDungeonFiles()
+                // 没有活跃实例时才完全清理，否则只增量加载/覆盖
+                if (!hasActiveInstances) {
+                    dungeonTemplates.clear()
+                    dungeonScripts.clear()
+                    dungeonObstacleConfigs.clear()
+                    dungeonMonsterConfigs.clear()
+                    dungeonInteractConfigs.clear()
+                    dungeonPlanConfigs.clear()
+                    dungeonRegionConfigs.clear()
+                    obstacleConfigs.clear()
+                    monsterConfigs.clear()
+                }
+
+                loadDungeonFiles()
+            } catch (e: Exception) {
+                severe("Error during reload: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                isReloading = false
+            }
+
+            // 重载完成回调（确保在主线程执行）
+            if (onComplete != null) {
+                submit { onComplete() }
+            }
         }
     }
 
     @Awake(LifeCycle.INIT)
     fun initDependenciesInit() {
         solveDependencies(dependencies)
+    }
+
+    /**
+     * 清理服务器启动时可能残留的 KDP_* 地牢世界文件夹
+     * 通常在服务器意外关闭后，地牢世界文件夹未被正确删除
+     */
+    private fun cleanupResidualWorlds() {
+        val worldContainer = Bukkit.getWorldContainer()
+        val worldFolders = worldContainer.listFiles { file ->
+            file.isDirectory && file.name.startsWith("KDP_")
+        } ?: return
+
+        if (worldFolders.isEmpty()) return
+
+        console.asLangText("ResidualWorldsCleanupStart").let { console.sendMessage(it) }
+
+        var cleaned = 0
+        for (folder in worldFolders) {
+            try {
+                // 确保世界未加载
+                val world = Bukkit.getWorld(folder.name)
+                if (world != null) {
+                    Bukkit.unloadWorld(world, false)
+                }
+                deleteDirectory(folder)
+                cleaned++
+            } catch (e: Exception) {
+                severe("Failed to delete residual world folder: ${folder.name} - ${e.message}")
+            }
+        }
+
+        console.asLangText("ResidualWorldsCleanupDone", cleaned.toString()).let { console.sendMessage(it) }
+    }
+
+    /**
+     * 递归删除目录（含重试机制）
+     */
+    private fun deleteDirectory(directory: File, maxRetries: Int = 5): Boolean {
+        if (!directory.exists()) return true
+
+        if (directory.isDirectory) {
+            directory.listFiles()?.forEach { file ->
+                deleteDirectory(file, maxRetries)
+            }
+        }
+
+        var retries = 0
+        while (retries < maxRetries) {
+            if (directory.delete()) return true
+            retries++
+            if (retries < maxRetries) {
+                try {
+                    Thread.sleep(200)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+            }
+        }
+
+        if (directory.exists()) {
+            warningL("WarningDeleteDirectoryFailed", directory.name)
+        }
+        return !directory.exists()
     }
 
 

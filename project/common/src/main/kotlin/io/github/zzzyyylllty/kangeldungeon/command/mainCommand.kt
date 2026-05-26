@@ -1,6 +1,8 @@
 package io.github.zzzyyylllty.kangeldungeon.command
 
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.reloadCustomConfig
+import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon
+import io.github.zzzyyylllty.kangeldungeon.data.DungeonState
 import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
 import taboolib.common.platform.command.component.CommandComponentDynamic
 import taboolib.common.platform.command.component.CommandComponentLiteral
@@ -16,30 +18,81 @@ import taboolib.common.platform.command.subCommand
 import taboolib.common.platform.function.pluginVersion
 import taboolib.common.platform.function.runningPlatform
 import taboolib.module.nms.MinecraftVersion.versionId
+import taboolib.platform.util.asLangText
 
 /**
  * Usage: /kangeldungeon
  *          ├── about
- *          ├── api
- *          │   ├── minimessage <content>
- *          │   ├── eval <script>
- *          │   ├── evalByPlayer <player> <script>
- *          ├── debug
- *          │   ├── getItem <id>
- *          │   ├── getItemMap
- *          │   ├── diagnose
- *          │   └── getUserData <player>
- *          ├── item
- *          │      ├── give [player] [amount] [silent]
- *          │      └── member <user>
- *          │              ├── permission <permissionGroup>
- *          │              ├── kick
- *          │              ├── mute <time>
- *          │              ├── title
- *          │              │   ├── special <Title>
- *          │              │   └── special (clear)
- *          │              └── blacklist
-
+ *          ├── status
+ *          ├── reload
+ *          ├── api         &lt;!---&gt; /dga
+ *          │   ├── minimessage &lt;content&gt;
+ *          │   ├── eval &lt;script&gt;
+ *          │   ├── evalJs &lt;script&gt;
+ *          │   ├── evalByPlayer &lt;player&gt; &lt;script&gt;
+ *          │   ├── evalSilent &lt;script&gt;
+ *          │   └── evalByPlayerSilent &lt;player&gt; &lt;script&gt;
+ *          ├── debug       &lt;!---&gt; /dgd
+ *          │   ├── getBlockRegenMap
+ *          │   ├── getTemplates
+ *          │   ├── getInstances
+ *          │   ├── getMonsterConfigs &lt;dungeon&gt;
+ *          │   ├── getObstacleConfigs &lt;dungeon&gt;
+ *          │   ├── getInteractConfigs &lt;dungeon&gt;
+ *          │   ├── getPlans &lt;dungeon&gt;
+ *          │   ├── getScripts &lt;dungeon&gt;
+ *          │   ├── getDevMode / setDevMode &lt;mode&gt;
+ *          │   ├── getMemoryInfo
+ *          │   └── getConfig &lt;key&gt;
+ *          ├── data        &lt;!---&gt; /dd
+ *          │   ├── get &lt;id&gt; [player]
+ *          │   ├── remove &lt;id&gt; [player]
+ *          │   ├── set &lt;player&gt; &lt;id&gt; &lt;value&gt;
+ *          │   ├── clear [player]
+ *          │   ├── getCooldown &lt;id&gt; [player]
+ *          │   ├── removeCooldown &lt;id&gt; [player]
+ *          │   ├── setCooldown &lt;player&gt; &lt;id&gt; &lt;value&gt;
+ *          │   ├── clearCooldown [player]
+ *          │   └── browse [player]
+ *          └── dungeon     &lt;!---&gt; /dgm
+ *              ├── templates
+ *              ├── create &lt;template&gt; [player] [extra...]
+ *              ├── start &lt;uuid&gt;
+ *              ├── stop &lt;uuid&gt;
+ *              ├── complete &lt;uuid&gt;
+ *              ├── list
+ *              ├── info &lt;uuid&gt;
+ *              ├── join &lt;uuid&gt;
+ *              ├── leave
+ *              ├── tp &lt;uuid&gt;
+ *              ├── kick &lt;player&gt;
+ *              ├── addplayer &lt;uuid&gt; &lt;player&gt;
+ *              └── listplayers &lt;uuid&gt;
+ *          └── party       &lt;!---&gt; /kdparty
+ *              ├── create
+ *              ├── invite &lt;player&gt;
+ *              ├── join &lt;teamId&gt;
+ *              ├── leave
+ *              ├── kick &lt;player&gt;
+ *              ├── transfer &lt;player&gt;
+ *              ├── disband
+ *              ├── info
+ *              └── invites
+ *          └── admin       &lt;!---&gt; /kda
+ *              ├── info
+ *              ├── stopall
+ *              ├── purge
+ *              ├── maintenance [on/off]
+ *              ├── save
+ *              ├── worlds
+ *              ├── unloadworld &lt;world&gt;
+ *              ├── playerinfo &lt;player&gt;
+ *              ├── blacklist add/remove/list
+ *              ├── meta &lt;uuid&gt; list/get/set/add/delete
+ *              ├── instance &lt;uuid&gt;
+ *              ├── broadcast &lt;uuid&gt; &lt;message&gt;
+ *              ├── heal &lt;uuid&gt;
+ *              └── kickall
  *
  * */
 
@@ -57,12 +110,30 @@ object KAngelDungeonMainCommand {
     @CommandBody
     val about = subCommand {
         execute<CommandSender> { sender, context, argument ->
-            sender.sendStringAsComponent("<gradient:aqua:blue>KAngelDungeon</gradient> <#ccccff>$pluginVersion")
-            sender.sendStringAsComponent("<gradient:#6600ff:#aa00aa>Running on:</gradient> <light_purple>${runningPlatform.name} - $versionId")
-            sender.sendStringAsComponent("<#cc66ff>Plugin by AkaCandyKAngel.")
-            sender.sendStringAsComponent("<#cc66ff>Use <blue>/kangeldungeon help</blue> for help.")
+            sender.sendStringAsComponent(sender.asLangText("MainAbout", pluginVersion))
+            sender.sendStringAsComponent(sender.asLangText("MainRunningOn", runningPlatform.name, versionId.toString()))
+            sender.sendStringAsComponent(sender.asLangText("MainAuthor"))
+            sender.sendStringAsComponent(sender.asLangText("MainHelp"))
         }
     }
+
+    @CommandBody
+    val status = subCommand {
+        execute<CommandSender> { sender, context, argument ->
+            val templates = KAngelDungeon.dungeonTemplates.size
+            val active = KAngelDungeon.dungeonInstances.count { it.value.state == DungeonState.ACTIVE }
+            val preparing = KAngelDungeon.dungeonInstances.count { it.value.state == DungeonState.PREPARING }
+            val devMode = KAngelDungeon.devMode
+            sender.sendStringAsComponent(sender.asLangText("MainStatusHeader"))
+            sender.sendStringAsComponent(sender.asLangText("MainStatusVersion", pluginVersion))
+            sender.sendStringAsComponent(sender.asLangText("MainStatusPlatform", runningPlatform.name))
+            sender.sendStringAsComponent(sender.asLangText("MainStatusDevMode",
+                if (devMode) sender.asLangText("StatusOn") else sender.asLangText("StatusOff")))
+            sender.sendStringAsComponent(sender.asLangText("MainStatusTemplates", templates.toString()))
+            sender.sendStringAsComponent(sender.asLangText("MainStatusActive", active.toString(), preparing.toString()))
+        }
+    }
+
     @CommandBody
     val main = mainCommand {
         createModernHelper()
@@ -90,17 +161,23 @@ object KAngelDungeonMainCommand {
     @CommandBody
     val dungeon = DungeonCommand
 
+    @CommandBody
+    val party = PartyCommand
+
+    @CommandBody
+    val admin = AdminCommand
 
     @CommandBody
     val reload = subCommand {
         execute<CommandSender> { sender, context, argument ->
-            sender.sendStringAsComponent("<yellow>Reloading...")
+            sender.sendStringAsComponent(sender.asLangText("MainReloading"))
             try {
-                reloadCustomConfig(true)
-                sender.sendStringAsComponent("<green>Reloaded.")
+                reloadCustomConfig(async = true, onComplete = {
+                    sender.sendStringAsComponent(sender.asLangText("MainReloaded"))
+                })
             }
             catch (e: Exception) {
-                sender.sendStringAsComponent("<red>Reload failed: ${e.message}")
+                sender.sendStringAsComponent(sender.asLangText("MainReloadFailed", e.message ?: "Unknown"))
                 e.printStackTrace()
             }
         }

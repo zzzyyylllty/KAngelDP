@@ -1,0 +1,35 @@
+# =============================================
+# Sample Interact Config / 示例交互配置
+# Triggered when a player interacts with a specific block
+# 玩家与特定方块交互时触发
+# =============================================
+button:
+  pos: 130 -57 178
+  agent:
+    # onActive: Called when the button is pressed / 按钮被按下时调用
+    onActive: |-
+      instance.sendMessageToAllPlayers("Button pushing!");
+      // [Access event, block, action / 获取事件、方块、动作]
+      if (block) {
+        instance.sendMessageToAllPlayers("<gray>Clicked block type: " + block.getType().name() + "</gray>");
+      }
+      instance.sendMessageToAllPlayers("<gray>Action: " + action + "</gray>");
+      // [Sound / 音效] Play button press sound / 播放按钮按下音效
+      instance.playSoundAt("block_stone_button_click_on", 130.0, -57.0, 178.0, 1.0, 1.0);
+      // [Target Selector / 目标选择器] Check nearby players / 检查附近玩家
+      var nearby = instance.selectTargetsInRadius("@all[]", 130.0, -57.0, 178.0, 10.0);
+      if (nearby.length == 0) {
+        instance.sendMessageToAllPlayers("<gray>No players nearby! / 附近没有玩家！");
+      }
+      // [Obstacle / 障碍物] Remove ironbars gate / 移除铁栅栏障碍
+      instance.openObstacle("ironbars");
+      // [Monster / 怪物] Spawn post-ironbars monster group / 召唤铁栅栏后的怪物
+      instance.spawnMonsters("postironbars");
+
+    # onPost: Called after onActive completes / onActive 完成后调用
+    onPost: |-
+      instance.sendMessageToAllPlayers("Button pushed!");
+      // [Particle / 粒子] Button activation effect / 按钮激活特效
+      instance.spawnParticle("FLAME", 130.0, -57.0, 178.0, 20, 1.0, 1.0, 1.0, 0.2);
+      // [Meta / 元数据] Track button presses / 记录按钮触发次数
+      instance.addMeta("button_presses", 1);

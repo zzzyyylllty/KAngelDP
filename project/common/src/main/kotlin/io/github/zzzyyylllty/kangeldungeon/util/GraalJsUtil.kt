@@ -1,7 +1,7 @@
 package io.github.zzzyyylllty.kangeldungeon.util
 
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.gjsScriptCache
-import io.github.zzzyyylllty.kangeldungeon.logger.severeS
+import io.github.zzzyyylllty.kangeldungeon.logger.severeL
 import org.graalvm.polyglot.Context
 import org.graalvm.polyglot.Engine
 import org.graalvm.polyglot.HostAccess
@@ -10,7 +10,7 @@ import org.graalvm.polyglot.Value
 import taboolib.common.LifeCycle
 import taboolib.common.env.RuntimeEnv
 import taboolib.common.platform.Awake
-import org.kotlincrypto.hash.sha2.SHA256
+import java.security.MessageDigest
 import javax.script.*
 import kotlin.String
 
@@ -52,6 +52,14 @@ val hostAccess: HostAccess? by lazy {
 
 object GraalJsUtil {
 
+    /**
+     * 每个线程缓存一个 GraalVM Context，避免重复创建（创建 Context 开销大）。
+     * GraalVM Context 不是线程安全的，因此使用 ThreadLocal 确保每个线程有自己的实例。
+     */
+    private val contextThreadLocal = ThreadLocal.withInitial { newGraalContext() }
+    private val allContexts = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Context, Boolean>())
+    private val contextsLock = Any()
+
     fun compile(script: String): Source? {
         return try {
             Source.newBuilder(GJS_LANG_ID, script, "script.js").build()
@@ -62,14 +70,28 @@ object GraalJsUtil {
     }
 
     fun newGraalContext(): Context {
+        val dangerMode = io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.config.getBoolean("allow-danger-js", false)
 
-        return Context.newBuilder(GJS_LANG_ID)
-            .allowAllAccess(true)
-//            .allowHostAccess(hostAccess)
+        val builder = Context.newBuilder(GJS_LANG_ID)
             .engine(globalGJSEngine)
-            .allowHostAccess(HostAccess.ALL) // 允许访问所有主机类
-            .allowHostClassLookup { true } // 允许查找所有类
-            .build()
+
+        if (dangerMode) {
+            // 危险模式：允许完整的 Java 运行时访问（等同于启用前的旧行为）
+            builder.allowAllAccess(true)
+                .allowHostAccess(HostAccess.ALL)
+                .allowHostClassLookup { true }
+        } else {
+            // 安全模式：只能调用通过 bindings 传入的对象的方法，不能通过 Java.type() 加载新类
+            builder.allowAllAccess(false)
+                .allowHostAccess(HostAccess.ALL)
+                .allowHostClassLookup { false }
+        }
+
+        synchronized(contextsLock) {
+            val ctx = builder.build()
+            allContexts.add(ctx)
+            return ctx
+        }
     }
 
 
@@ -87,7 +109,7 @@ object GraalJsUtil {
 
         if (source == null) {
             // 编译失败
-            severeS("Script compilation failed for script: $script")
+            severeL("GraalJsCompileFailed", script)
             return null
         }
 
@@ -95,13 +117,31 @@ object GraalJsUtil {
 
     }
 
-    private fun executeScript(scriptOrSource: Any, vars: Map<String, Any?>): Any? {
-        createContext(vars).use { context ->
-            val bindings: Value = context.getBindings(GJS_LANG_ID)
-            vars.forEach {
-                bindings.putMember(it.key, it.value)
-            }
+    // 重入检测：记录当前线程的重入深度，防止嵌套 cleanup 破坏外层变量
+    private val reentrantDepth = ThreadLocal.withInitial { 0 }
 
+    private fun executeScript(scriptOrSource: Any, vars: Map<String, Any?>): Any? {
+        val context = contextThreadLocal.get()
+        val bindings: Value = context.getBindings(GJS_LANG_ID)
+
+        val depth = reentrantDepth.get()
+        reentrantDepth.set(depth + 1)
+
+        // 保存将被子脚本覆盖的旧变量，用于重入场景的恢复
+        val savedVars = if (depth > 0) {
+            vars.keys.filter { bindings.hasMember(it) }.associateWith { key ->
+                try { bindings.getMember(key) } catch (_: Exception) { null }
+            }
+        } else {
+            emptyMap()
+        }
+
+        // 设置本次执行的变量
+        vars.forEach { (key, value) ->
+            bindings.putMember(key, value)
+        }
+
+        try {
             val result: Value = when (scriptOrSource) {
                 is String -> context.eval(GJS_LANG_ID, scriptOrSource)
                 is Source -> context.eval(scriptOrSource)
@@ -109,13 +149,42 @@ object GraalJsUtil {
             }
 
             return result.`as`(Any::class.java)
+        } finally {
+            // 重入场景：恢复被覆盖的外层变量而不是删除
+            if (depth > 0) {
+                savedVars.forEach { (key, value) ->
+                    if (value != null) bindings.putMember(key, value) else bindings.removeMember(key)
+                }
+                vars.keys.forEach { key ->
+                    if (key !in savedVars) bindings.removeMember(key)
+                }
+            } else {
+                // 非重入场景：正常清理
+                vars.keys.forEach { key ->
+                    bindings.removeMember(key)
+                }
+            }
+            reentrantDepth.set(depth)
         }
     }
 
-    fun createContext(vars: Map<String, Any?>): Context {
-        // 初始化预热上下文
-        val context = newGraalContext()
-        return context
+    fun createContext(): Context {
+        return newGraalContext()
+    }
+
+    /**
+     * 关闭所有线程的 GraalVM Context，供插件卸载时调用
+     */
+    fun closeCurrentContext() {
+        contextThreadLocal.get()?.close()
+        contextThreadLocal.remove()
+        // 清理其他线程创建的 Context（加锁防止并发创建）
+        synchronized(contextsLock) {
+            for (ctx in allContexts) {
+                try { ctx.close() } catch (_: Exception) {}
+            }
+            allContexts.clear()
+        }
     }
 
     private fun createScriptSource(script: String, cached: Boolean = true): Source {
@@ -136,7 +205,6 @@ object GraalJsUtil {
 }
 
 fun String.generateHash(): String {
-    val sha256 = SHA256()
-    sha256.update(this.toByteArray())
-    return sha256.digest().joinToString("") { "%02x".format(it) }
+    val digest = MessageDigest.getInstance("SHA-256")
+    return digest.digest(this.toByteArray()).joinToString("") { "%02x".format(it) }
 }

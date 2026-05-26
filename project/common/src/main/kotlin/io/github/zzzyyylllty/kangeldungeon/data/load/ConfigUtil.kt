@@ -36,7 +36,12 @@ object ConfigUtil {
 
 }
 fun checkRegexMatch(input: String, regex: String): Boolean {
-    return input.matches(regex.toRegex())
+    return try {
+        input.matches(regex.toRegex())
+    } catch (e: Exception) {
+        io.github.zzzyyylllty.kangeldungeon.logger.warningL("WarningFileLoadRegexInvalid", regex, input)
+        false
+    }
 }
 
 

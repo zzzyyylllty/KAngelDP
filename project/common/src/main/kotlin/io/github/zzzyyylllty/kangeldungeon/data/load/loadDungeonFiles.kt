@@ -23,11 +23,20 @@ fun loadDungeonFiles() {
         warningL("DungeonFolderRegen")
         // 释放示例地牢文件
         releaseResourceFile("dungeon/sample/option.yml")
-        releaseResourceFile("dungeon/sample/region.yml")
-        releaseResourceFile("dungeon/sample/monster.yml")
+        releaseResourceFile("dungeon/sample/region/sample.yml")
+        releaseResourceFile("dungeon/sample/monster/monster.yml")
+        releaseResourceFile("dungeon/sample/interact/sample.yml")
         releaseResourceFile("dungeon/sample/script/sample.yml")
-        // 不要 return，继续加载已释放的文件
-        Unit
+        releaseResourceFile("dungeon/sample/obstacle/ironbars.yml")
+        releaseResourceFile("dungeon/sample/plan/simpleTimerPlan.yml")
+        releaseResourceFile("dungeon/sample/kit/rewards.yml")
+        // releaseResourceFile 同步释放后文件夹已存在，继续加载
+    }
+    // 确保 schematics 文件夹存在（用于 WorldEdit .schem 文件）
+    val schematicsFolder = File(getDataFolder(), "schematics")
+    if (!schematicsFolder.exists()) {
+        schematicsFolder.mkdirs()
+        infoL("SchematicsFolderCreated")
     }
     val files = dungeonFolder.listFiles()
     if (files == null || files.isEmpty()) {
@@ -58,65 +67,177 @@ fun loadDungeonFile(file: File) {
         return
     }
 
-    // 检查文件扩展名是否匹配配置的正则表达式
-    if (!checkRegexMatch(file.name, (config["file-load.dungeon"] ?: ".*").toString())) {
-        devLog("${file.name} not match regex, skipping...")
+    // 检测 monster/ 子目录下的文件，作为地牢怪物配置加载
+    if (file.parentFile.name == "monster") {
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonMonsterFile(dungeonName, file)
         return
     }
 
-    val map = multiExtensionLoader(file)
-    if (map != null) {
-        for (entry in map.entries) {
-            val key = entry.key
-            val value = entry.value
-            (value as? Map<String, Any?>)?.let { arg -> loadDungeon(key, arg, file.parentFile.name) }
-        }
-    } else {
-        devLog("Map is null, skipping.")
+    // 检测 obstacle/ 子目录下的文件，作为地牢障碍物配置加载
+    if (file.parentFile.name == "obstacle") {
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonObstacleFile(dungeonName, file)
+        return
     }
+
+    // 检测 interact/ 子目录下的文件，作为地牢交互配置加载
+    if (file.parentFile.name == "interact") {
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonInteractFile(dungeonName, file)
+        return
+    }
+
+    // 检测 plan/ 子目录下的文件，作为地牢计划配置加载
+    if (file.parentFile.name == "plan") {
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonPlanFile(dungeonName, file)
+        return
+    }
+
+    // 检测 kit/ 子目录下的文件，作为地牢Kit奖励包配置加载
+    if (file.parentFile.name == "kit") {
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonKitFile(dungeonName, file)
+        return
+    }
+
+    // 处理 option.yml — 将其作为单个地牢模板加载，模板名取父目录名
+    if (file.name.equals("option.yml", ignoreCase = true)) {
+        val map = multiExtensionLoader(file)
+        if (map != null) {
+            val dungeonName = file.parentFile.name
+            loadDungeon(dungeonName, map, file.parentFile.name)
+            devLog("Loaded dungeon template from option.yml: $dungeonName")
+        }
+        return
+    }
+
+    // 检测 region/ 子目录下的文件，作为地牢区域配置加载
+    if (file.parentFile.name == "region") {
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonRegionFile(dungeonName, file)
+        return
+    }
+
+    // 兼容旧版 region.yml 位于地牢根目录（dungeon/<name>/region.yml）
+    if (file.name.equals("region.yml", ignoreCase = true)) {
+        val dungeonName = file.parentFile.name
+        loadDungeonRegionFile(dungeonName, file)
+        return
+    }
+
+    // 不处理其他文件（如 region.yml 等非地牢模板文件）
+    devLog("Skipping non-template file: ${file.name}")
 }
 
+@Suppress("UNCHECKED_CAST")
 fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     val c = ConfigUtil
 
-    // 解析显示信息
+    // ===== 解析 display =====
     val display = arg["display"] as? Map<String, Any?> ?: emptyMap()
     val displayName = display["name"] as? String ?: key
     val description = (display["description"] as? String)?.lines() ?: emptyList()
+    val icon = parseIcon(display["icon"] as? Map<String, Any?>)
 
-    // 解析地图配置
+    // ===== 解析 map =====
     val mapConfig = arg["map"] as? Map<String, Any?> ?: emptyMap()
     val mapType = mapConfig["type"] as? String ?: "MAP"
     val source = mapConfig["source"] as? String
-
-    // 确定是schematic文件还是世界模板
     val schematicFile = if (mapType.equals("SCHEMATIC", ignoreCase = true)) source else null
     val worldTemplate = if (mapType.equals("MAP", ignoreCase = true)) source else null
-
-    // 解析出生点
     val spawnConfig = (mapConfig["spawn"]) as? Map<String, Any?> ?: emptyMap()
-    val spawnLoc = Vector(
+    val spawnVector = Vector(
         (spawnConfig["x"] as? Number)?.toDouble() ?: 0.0,
         (spawnConfig["y"] as? Number)?.toDouble() ?: 100.0,
         (spawnConfig["z"] as? Number)?.toDouble() ?: 0.0
     )
-    val spawnVector = spawnLoc
 
-    // 解析游戏设置
+    // ===== 解析 meta =====
+    val metaSection = arg["meta"] as? Map<String, Any?> ?: emptyMap()
+    val globalMeta = metaSection["global"] as? Map<String, Any?> ?: emptyMap()
+    val playerMeta = metaSection["player"] as? Map<String, Any?> ?: emptyMap()
+    val metaConfig = MetaConfig(global = globalMeta, player = playerMeta)
+
+    // ===== 解析 gameplay =====
     val gameplay = arg["gameplay"] as? Map<String, Any?> ?: emptyMap()
     val general = gameplay["general"] as? Map<String, Any?> ?: emptyMap()
 
-    val timeLimit = general["TimeLimit"] as? Double ?: 3600.0
-    val preparationTime = general["PreparationTime"] as? Double ?: 30.0
+    val timeLimit = (general["TimeLimit"] as? Number)?.toDouble() ?: 3600.0
+    val preparationTime = (general["PreparationTime"] as? Number)?.toDouble() ?: 30.0
     val allowRespawn = general["AllowRespawn"] as? Boolean ?: false
     val keepInventory = general["KeepInventory"] as? Boolean ?: false
     val pvpEnabled = general["PvPEnabled"] as? Boolean ?: false
-    val naturalRegeneration = (arg["vanilla-options"] as? Map<String, Any?>)?.get("HealthRegain") as? Boolean ?: true
-
-    // 权限要求
     val requiredPermission = general["RequiredPermission"] as? String
 
-    // 解析代理脚本 (agent)
+    // 解析 keep-inventory 详细配置
+    val keepInvSection = general["keep-inventory"] as? Map<String, Any?>
+    val keepInventoryConfig = KeepInventoryConfig(
+        enabled = (keepInvSection?.get("enabled") as? Boolean) ?: keepInventory,
+        requiredLives = (keepInvSection?.get("required-lives") as? Boolean) ?: false
+    )
+
+    // 解析 bannedItems
+    val bannedItems = (general["bannedItems"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+
+    // 解析 block-place / block-break 控制
+    fun parseBlockControl(section: Map<String, Any?>?): BlockControlConfig {
+        if (section == null) return BlockControlConfig()
+        val mode = try {
+            BlockControlMode.valueOf((section["mode"] as? String)?.uppercase() ?: "BLACKLIST")
+        } catch (_: IllegalArgumentException) { BlockControlMode.BLACKLIST }
+        val list = (section["list"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+        return BlockControlConfig(mode = mode, list = list)
+    }
+    val blockPlace = parseBlockControl(general["block-place"] as? Map<String, Any?>)
+    val blockBreak = parseBlockControl(general["block-break"] as? Map<String, Any?>)
+
+    // 解析 gameplay.general 其他字段
+    val leaveOnDeath = general["LeaveOnDeath"] as? Boolean ?: false
+    val adventureMode = general["adventureMode"] as? Boolean ?: true
+    val minPlayers = (general["MinPlayers"] as? Number)?.toInt() ?: 1
+    val maxPlayers = (general["MaxPlayers"] as? Number)?.toInt() ?: 5
+    val allowParty = general["allowParty"] as? Boolean ?: true
+
+    // ===== 解析 commands =====
+    val commandsSection = gameplay["commands"] as? Map<String, Any?> ?: emptyMap()
+    val commandMode = try {
+        CommandMode.valueOf((commandsSection["mode"] as? String)?.uppercase() ?: "BLACKLIST")
+    } catch (_: IllegalArgumentException) { CommandMode.BLACKLIST }
+    val commandList = (commandsSection["list"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+
+    // ===== 解析 sequence.timer =====
+    val sequenceSection = gameplay["sequence"] as? Map<String, Any?> ?: emptyMap()
+    val timerSection = sequenceSection["timer"] as? Map<String, Any?> ?: emptyMap()
+    val timerMode = try {
+        TimerMode.valueOf((timerSection["mode"] as? String)?.uppercase() ?: "COUNTDOWN")
+    } catch (_: IllegalArgumentException) { TimerMode.COUNTDOWN }
+    val timerStart = (timerSection["start"] as? Number)?.toInt() ?: 600
+
+    // ===== 解析 vanilla-options =====
+    val vanillaSection = arg["vanilla-options"] as? Map<String, Any?> ?: emptyMap()
+    val hungry = vanillaSection["hungry"] as? Boolean ?: true
+    val durability = vanillaSection["durability"] as? Boolean ?: true
+    val itemsDrop = vanillaSection["items-drop"] as? Boolean ?: true
+    val itemsPickup = vanillaSection["items-pickup"] as? Boolean ?: true
+
+    // 解析 HealthRegain 子项
+    val healthRegainSection = vanillaSection["HealthRegain"] as? Map<String, Any?>
+    val healthRegainConfig = HealthRegainConfig(
+        food = (healthRegainSection?.get("food") as? Boolean) ?: false,
+        saturation = (healthRegainSection?.get("saturation") as? Boolean) ?: false,
+        potions = (healthRegainSection?.get("potions") as? Boolean) ?: false,
+        other = (healthRegainSection?.get("other") as? Boolean) ?: false
+    )
+    // naturalRegeneration 向后兼容：只要有任何方式恢复则为 true
+    val naturalRegeneration = healthRegainConfig.isAnyEnabled
+
+    // 解析 spawnpoint (格式: "x y z")
+    val spawnpointStr = vanillaSection["spawnpoint"] as? String
+    val spawnpointVector = parseSpawnpointString(spawnpointStr)
+
+    // ===== 解析 agent（代理脚本） =====
     val agentSection = arg["agent"] as? Map<String, Any?> ?: emptyMap()
     val agentMap = LinkedHashMap<String, Agent>()
     for ((trigger, script) in agentSection) {
@@ -126,27 +247,80 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     }
     val agents = if (agentMap.isNotEmpty()) Agents(agentMap) else null
 
-    // 创建地牢模板
+    // ===== 创建地牢模板 =====
     val template = DungeonTemplate(
         name = key,
         displayName = displayName,
         description = description,
+        icon = icon,
         schematicFile = schematicFile,
         worldTemplate = worldTemplate,
-        schematicPasteLocation = spawnVector,
-        playerSpawnOffset = spawnVector,
+        schematicPasteLocation = spawnVector.clone() as Vector,
+        playerSpawnOffset = spawnVector.clone() as Vector,
         timeLimit = timeLimit,
         preparationTime = preparationTime,
         allowRespawn = allowRespawn,
-        keepInventory = keepInventory,
+        keepInventory = keepInventoryConfig.enabled,
         pvpEnabled = pvpEnabled,
         naturalRegeneration = naturalRegeneration,
         requiredPermission = requiredPermission,
-        agents = agents
+        agents = agents,
+        // 新字段
+        gameplayGeneral = GameplayGeneralConfig(
+            leaveOnDeath = leaveOnDeath,
+            adventureMode = adventureMode,
+            minPlayers = minPlayers,
+            maxPlayers = maxPlayers,
+            allowParty = allowParty,
+            keepInventory = keepInventoryConfig,
+            bannedItems = bannedItems,
+            blockPlace = blockPlace,
+            blockBreak = blockBreak
+        ),
+        commandConfig = CommandConfig(
+            mode = commandMode,
+            list = commandList
+        ),
+        timerConfig = TimerConfig(
+            mode = timerMode,
+            start = timerStart
+        ),
+        vanillaOptions = VanillaOptions(
+            hungry = hungry,
+            healthRegain = healthRegainConfig,
+            durability = durability,
+            itemsDrop = itemsDrop,
+            itemsPickup = itemsPickup,
+            spawnpoint = spawnpointVector
+        ),
+        metaConfig = metaConfig
     )
 
     dungeonTemplates[key] = template
     devLog("Loaded dungeon template: $key")
+}
+
+/**
+ * 解析图标配置
+ */
+private fun parseIcon(data: Map<String, Any?>?): IconConfig? {
+    if (data == null) return null
+    val material = data["material"] as? String ?: return null
+    val parameters = data["parameters"] as? Map<String, Any?> ?: emptyMap()
+    return IconConfig(material = material, parameters = parameters)
+}
+
+/**
+ * 解析 spawnpoint 字符串 "x y z" 为 Vector
+ */
+private fun parseSpawnpointString(value: String?): Vector? {
+    if (value == null) return null
+    val parts = value.trim().split("\\s+".toRegex())
+    if (parts.size < 3) return null
+    val x = parts[0].toDoubleOrNull() ?: return null
+    val y = parts[1].toDoubleOrNull() ?: return null
+    val z = parts[2].toDoubleOrNull() ?: return null
+    return Vector(x, y, z)
 }
 
 /**
@@ -159,7 +333,7 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
  *       JS code
  */
 fun loadDungeonScriptFile(file: File) {
-    if (!checkRegexMatch(file.name, (config["file-load.dungeon"] ?: ".*").toString())) {
+    if (!checkRegexMatch(file.name, (config["file-load.script"] ?: ".*").toString())) {
         devLog("${file.name} not match regex, skipping...")
         return
     }
@@ -180,5 +354,196 @@ fun loadDungeonScriptFile(file: File) {
         )
         dungeonScriptMap[scriptName] = script
         devLog("Loaded dungeon script: $dungeonId/$scriptName")
+    }
+}
+
+/**
+ * 加载地牢怪物配置文件（位于 dungeon/<dungeon-id>/monster/ 目录下）
+ * 存储到 dungeonMonsterConfigs[dungeonName][monsterId]
+ */
+fun loadDungeonMonsterFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.monster"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val dungeonMap = KAngelDungeon.dungeonMonsterConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+    for (entry in map.entries) {
+        val key = entry.key
+        val value = entry.value as? Map<String, Any?> ?: continue
+        val config = parseMonsterConfig(key, value)
+        if (config != null) {
+            dungeonMap[key] = config
+            devLog("Loaded per-dungeon monster: $dungeonName/$key")
+        }
+    }
+}
+
+/**
+ * 加载地牢障碍物配置文件（位于 dungeon/<dungeon-id>/obstacle/ 目录下）
+ * 存储到 dungeonObstacleConfigs[dungeonName][obstacleId]
+ */
+fun loadDungeonObstacleFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.obstacle"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val dungeonMap = KAngelDungeon.dungeonObstacleConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+    for (entry in map.entries) {
+        val key = entry.key
+        val value = entry.value as? Map<String, Any?> ?: continue
+        val config = parseObstacleConfig(key, value)
+        if (config != null) {
+            dungeonMap[key] = config
+            devLog("Loaded per-dungeon obstacle: $dungeonName/$key")
+        }
+    }
+}
+
+/**
+ * 加载地牢交互配置文件（位于 dungeon/<dungeon-id>/interact/ 目录下）
+ * 存储到 dungeonInteractConfigs[dungeonName][interactId]
+ */
+fun loadDungeonInteractFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.interact"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val dungeonMap = KAngelDungeon.dungeonInteractConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+    for (entry in map.entries) {
+        val key = entry.key
+        val value = entry.value as? Map<String, Any?> ?: continue
+        val config = parseInteractConfig(key, value)
+        if (config != null) {
+            dungeonMap[key] = config
+            devLog("Loaded per-dungeon interact: $dungeonName/$key")
+        }
+    }
+}
+
+/**
+ * 加载地牢计划配置文件（位于 dungeon/<dungeon-id>/plan/ 目录下）
+ * YAML 格式：
+ *   planName:
+ *     trigger: BEGIN       # PREPARE / BEGIN / END / FAIL
+ *     delay: 200           # 首次执行延迟（tick）
+ *     period: 200          # 重复间隔（tick），不设置则表示只执行一次
+ *     async: false         # 是否异步执行
+ *     agent:
+ *       onRun: |-          # 要执行的 JS 脚本
+ *         instance.sendMessageToAllPlayers("hello");
+ */
+fun loadDungeonPlanFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.plan"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val dungeonMap = KAngelDungeon.dungeonPlanConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+
+    for (entry in map.entries) {
+        val planName = entry.key
+        val data = entry.value as? Map<String, Any?> ?: continue
+
+        val trigger = data["trigger"] as? String ?: "BEGIN"
+        val delay = (data["delay"] as? Number)?.toInt()
+        val period = (data["period"] as? Number)?.toInt()
+        val async = data["async"] as? Boolean ?: false
+        val agentSection = data["agent"] as? Map<String, Any?>
+        val onRun = agentSection?.get("onRun") as? String
+
+        val plan = Plan(
+            name = planName,
+            trigger = trigger,
+            delay = delay,
+            period = period,
+            async = async,
+            onRun = onRun
+        )
+        dungeonMap[planName] = plan
+        devLog("Loaded dungeon plan: $dungeonName/$planName (trigger=$trigger, delay=$delay, period=$period)")
+    }
+}
+
+/**
+ * 加载地牢区域配置文件（位于 dungeon/<dungeon-id>/region/ 目录下）
+ * YAML 格式：
+ *   regionName:
+ *     from: "x1 y1 z1"
+ *     to: "x2 y2 z2"
+ *     agent:
+ *       onEnter: |-
+ *         player.sendMessage("Entered!");
+ *       onLeave: |-
+ *         player.sendMessage("Left!");
+ */
+fun loadDungeonRegionFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.region"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val dungeonMap = KAngelDungeon.dungeonRegionConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+    for (entry in map.entries) {
+        val key = entry.key
+        val value = entry.value as? Map<String, Any?> ?: continue
+        val config = parseRegionConfig(key, value)
+        if (config != null) {
+            dungeonMap[key] = config
+            devLog("Loaded per-dungeon region: $dungeonName/$key")
+        }
+    }
+}
+
+/**
+ * 解析区域配置
+ */
+fun parseRegionConfig(id: String, data: Map<String, Any?>): RegionConfig? {
+    try {
+        val fromStr = data["from"] as? String ?: return null
+        val toStr = data["to"] as? String ?: return null
+        val fromParts = fromStr.split(" ").mapNotNull { it.toIntOrNull() }
+        val toParts = toStr.split(" ").mapNotNull { it.toIntOrNull() }
+        if (fromParts.size < 3 || toParts.size < 3) return null
+
+        val agentRaw = data["agent"] as? Map<String, Any?>
+        val agent = if (agentRaw != null) {
+            RegionAgent(
+                onEnter = agentRaw["onEnter"] as? String,
+                onLeave = agentRaw["onLeave"] as? String
+            )
+        } else null
+
+        return RegionConfig(
+            id = id,
+            from = RegionPos(fromParts[0], fromParts[1], fromParts[2]),
+            to = RegionPos(toParts[0], toParts[1], toParts[2]),
+            agent = agent
+        )
+    } catch (e: Exception) {
+        devLog("Failed to parse region config '$id': ${e.message}")
+        return null
+    }
+}
+
+/**
+ * 解析交互配置
+ */
+fun parseInteractConfig(id: String, data: Map<String, Any?>): InteractConfig? {
+    try {
+        val pos = data["pos"] as? String ?: return null
+        val agentRaw = data["agent"] as? Map<String, Any?>
+        val agent = if (agentRaw != null) {
+            InteractAgent(
+                onActive = agentRaw["onActive"] as? String,
+                onPost = agentRaw["onPost"] as? String
+            )
+        } else null
+        return InteractConfig(id = id, pos = pos, agent = agent)
+    } catch (e: Exception) {
+        devLog("Failed to parse interact config '$id': ${e.message}")
+        return null
     }
 }

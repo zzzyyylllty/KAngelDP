@@ -1,0 +1,63 @@
+
+# Vanilla mob example / 原版生物示例
+zombies:
+  active: true                         # default activation state / 默认激活状态
+  respawnCooldown: 0                   # ticks between respawns (0 = no auto-respawn) / 重生冷却(tick)
+  activationRange: -1                  # activation distance (-1 = infinite) / 激活距离
+  monsters:
+    - mob: minecraft:zombie       # minecraft: prefix for vanilla mobs
+      location: 115,-56,185
+      amount: 3
+      scattered: 5                # spawn radius scatter / 生成散布半径
+      level: 0                    # 0 = no level scaling / 不启用等级
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("Monster spawned!");
+      instance.applyPotionEffectToAllPlayers("RESISTANCE", 100, 0);
+      instance.addMeta("spawn_count", 1);
+
+    onAllKilled: |-
+      instance.sendMessageToAllPlayers("Monster all cleared!");
+      instance.addScoreboardTagToAllPlayers("wave_cleared");
+      instance.spawnParticle("FIREWORK", -112.0, -60.0, 101.0, 50, 2.0, 2.0, 2.0, 0.5);
+      instance.playSoundAt("entity_firework_rocket_blast", -112.0, -60.0, 101.0, 2.0, 1.0);
+      instance.addMeta("cleared_groups", 1);
+    onRespawn: |-
+      instance.sendMessageToAllPlayers("<yellow>Zombies respawned!</yellow>");
+postironbars:
+  active: true
+  respawnCooldown: 0
+  activationRange: -1
+  monsters:
+    - mob: mythicmobs:SkeletalKnight
+      location: 146,-58,157
+      amount: 2
+      scattered: 3
+      level: 3
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<red>Monsters behind iron bars is incoming!</red>");
+    onRespawn: |-
+      instance.sendMessageToAllPlayers("<red>Post-ironbars monsters respawned!</red>");
+
+
+boss_wave:
+  monsters:
+    - mob: mythicmobs:SkeletalKing  # mythicmobs: prefix for MM mobs
+      location: -112,-55,101
+      amount: 1
+      level: 5                       # MM level scaling / MM 等级倍率
+    - mob: mythicmobs:SkeletalKnight
+      location: 146,-58,157
+      amount: 2
+      scattered: 3
+      level: 3
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<red>Boss wave incoming!</red>");
+      instance.playSoundAt("entity_wither_spawn", -112.0, -55.0, 101.0, 2.0, 1.0);
+
+    onAllKilled: |-
+      instance.sendMessageToAllPlayers("<green>Boss wave cleared!</green>");
+      instance.firework(-112.0, -55.0, 101.0);
+      instance.addMeta("boss_cleared", 1);

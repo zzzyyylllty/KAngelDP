@@ -10,6 +10,14 @@
 # Debug mode
 debug: false
 
+# 是否允许地牢JS脚本访问完整的Java运行时（高风险！）
+# 启用后，地牢的JS脚本可以执行任意Java代码（文件IO、网络等）
+# 仅在你完全信任所有地牢脚本文件时开启，建议保持关闭
+# Whether to allow dungeon JS scripts to access full Java runtime (HIGH RISK!)
+# When enabled, JS scripts can execute arbitrary Java code (file I/O, network, etc.)
+# Only enable if you fully trust all dungeon script files. Keep disabled.
+allow-danger-js: false
+
 # 语言 language
 lang: en_US
 
@@ -24,3 +32,34 @@ database:
   password: angelkawaii2
   database: kangeldungeon
   table: kangeldungeon_data
+
+# 队伍系统配置 / Party system configuration
+party:
+  # 队伍模式: "kangeldp" (内置), "none" (禁用), 或外部插件名
+  mode: kangeldp
+  # 队伍最大人数
+  max-size: 5
+  # 邀请超时时间（秒）
+  invite-timeout: 60
+
+# 准备阶段通知设置
+preparation:
+  notify:
+    # 是否启用准备阶段通知
+    enabled: true
+    # 通知模式: "title" 标题, "actionbar" 动作栏, "chat" 聊天, "bossbar" 首领条
+    mode: "title"
+    # 通知间隔（秒），例如 5 表示每 5 秒通知一次
+    interval: 5
+    # 最后 N 秒开启每秒通知（覆盖 interval 设置）
+    countdown-last-seconds: 10
+
+# 清理残余地牢世界（KDP_* 前缀的文件夹）
+# 启用后，服务器启动时会自动删除残留的未正确清理的地牢世界文件夹
+cleanup-residual-worlds: true
+
+# 性能设置
+performance:
+  adventure:
+    # 使用拆分替换列表序列化（某些高版本 Paper 需要）
+    use-split-replace-list-serialize: false

@@ -65,7 +65,7 @@ data class OmniItem(
 
         if (parameters?.isNotEmpty() ?: false) {
 
-            val meta = itemStack.itemMeta
+            val meta = itemStack.itemMeta ?: return itemStack
             (parameters["display-name"]?.toString() ?: parameters["name"]?.toString())?.toComponent()?.let { meta.displayName(it) }
             parameters["custom-name"]?.toString()?.toComponent()?.let { meta.customName(it) }
             parameters["item-name"]?.toString()?.toComponent()?.let { meta.itemName(it) }

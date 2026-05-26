@@ -1,6 +1,6 @@
 package io.github.zzzyyylllty.kangeldungeon.function.javascript
 
-import io.github.zzzyyylllty.kangeldungeon.logger.severeS
+import io.github.zzzyyylllty.kangeldungeon.logger.severeL
 import org.bukkit.entity.Player
 import org.bukkit.event.Cancellable
 import org.bukkit.event.Event
@@ -10,7 +10,7 @@ object EventUtil {
         try {
             event.isCancelled = cancel
         } catch (e: Exception) {
-            severeS("An error occurred while trying to cancel event $event")
+            severeL("EventUtilCancelFailed", event.toString())
             e.printStackTrace()
         }
     }
@@ -18,7 +18,7 @@ object EventUtil {
         try {
             event.callEvent()
         } catch (e: Exception) {
-            severeS("An error occurred while trying to calling event $event")
+            severeL("EventUtilCallFailed", event.toString())
             e.printStackTrace()
         }
     }

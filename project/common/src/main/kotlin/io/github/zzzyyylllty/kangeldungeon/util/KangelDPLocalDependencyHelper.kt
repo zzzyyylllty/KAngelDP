@@ -98,7 +98,7 @@ class KAngelDungeonLocalDependencyHelper {
                     external
                 )
             } catch (ex: Throwable) {
-                warningS("Native dependency parsing failed. Fallback to Legacy Dependency Loader.")
+                warningL("DepAetherFailed")
                 ex.printStackTrace()
 
                 method.isAccessible = true
@@ -116,7 +116,7 @@ class KAngelDungeonLocalDependencyHelper {
                         external
                     )
                 } catch (e: Exception) {
-                    warningS("Legacy dependency parsing failed. Fallback to Default Repo Loader.")
+                    warningL("DepLegacyFailed")
 
                     try {
                     method.invoke(
@@ -132,7 +132,7 @@ class KAngelDungeonLocalDependencyHelper {
                         external
                     )
                     } catch (e: Exception) {
-                        severeS("Dependency loading failed for $url.")
+                        severeL("DepLoadFailed", url)
                     }
                 }
             }
@@ -160,13 +160,13 @@ class KAngelDungeonLocalDependencyHelper {
     @Throws(Throwable::class)
     fun loadFromLocalFile(url: URL?) {
         if (url == null) {
-            severeS("An error in processing load dependency from local file: File Url is null.")
+            severeL("DepLocalFileUrlNull")
             return
         }
         url.openStream().use { inputStream ->
             val parsed = JsonParser().parse(PrimitiveIO.readFully(inputStream, StandardCharsets.UTF_8))
             if (!parsed.isJsonArray) {
-                severeS("An error in processing load dependency from local file: Local file stream must be JsonArray.")
+                severeL("DepLocalFileNotJsonArray")
                 return
             }
             val array = parsed.getAsJsonArray()
