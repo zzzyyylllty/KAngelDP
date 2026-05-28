@@ -300,7 +300,7 @@ class DungeonInstance(
             clearPlayerMeta(player)
             // 4. 从死亡名单中清除
             deadPlayers.remove(player.uniqueId)
-            // 4. 传送玩家回到进入地牢前的位置
+            // 5. 传送玩家回到进入地牢前的位置
             try {
                 val prev = DungeonHelper.playerPreviousLocations.remove(player.uniqueId)
                 if (prev != null) {
@@ -309,7 +309,7 @@ class DungeonInstance(
             } catch (e: Exception) {
                 // ignore teleport failure
             }
-            // 5. 触发 Post 事件 (不可取消)
+            // 6. 触发 Post 事件 (不可取消)
             DungeonPlayerQuitPostEvent(this, player).call()
             meta.add("player.leave", 1)
             // 触发 PLAYER_LEAVE 任务
@@ -2283,6 +2283,13 @@ class DungeonInstance(
     }
 
     /**
+     * JS: var time = instance.getMetaAsLong("start_time")
+     */
+    fun getMetaAsLong(key: String): Long? {
+        return meta.getAsLong(key)
+    }
+
+    /**
      * 获取地牢元数据（浮点型）
      * JS: var value = instance.getMetaAsDouble("score")
      */
@@ -2485,7 +2492,11 @@ data class DungeonMeta(
     val meta: ConcurrentHashMap<String, Any?>,
 ) {
     fun add(key: String, value: Any?) {
-        meta.merge(key, value ?: return) { old, new -> CastHelper.increaseAny(old, new) }
+        if (value == null) {
+            meta[key] = null
+            return
+        }
+        meta.merge(key, value) { old, new -> CastHelper.increaseAny(old, new) }
     }
     fun set(key: String, value: Any?) {
         meta[key] = value

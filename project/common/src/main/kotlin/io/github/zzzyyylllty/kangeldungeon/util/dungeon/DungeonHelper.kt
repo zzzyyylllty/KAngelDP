@@ -663,12 +663,20 @@ object DungeonHelper {
 }
 
 /**
- * 监听玩家退出事件，清理位置缓存，避免内存泄漏
+ * 监听玩家退出事件，清理位置缓存和地牢索引，避免内存泄漏
  */
 object DungeonPlayerTracker {
     @SubscribeEvent
     fun onPlayerQuit(event: PlayerQuitEvent) {
         val uuid = event.player.uniqueId
         DungeonHelper.playerPreviousLocations.remove(uuid)
+
+        // 清理 playerToInstanceIndex，允许玩家重连后加入新地牢
+        val instanceUuid = KAngelDungeon.playerToInstanceIndex.remove(uuid)
+        if (instanceUuid != null) {
+            val instance = KAngelDungeon.dungeonInstances[instanceUuid]
+            // 将离线玩家标记为死亡，以便地牢不会因掉线玩家而卡住
+            instance?.markPlayerDead(event.player)
+        }
     }
 }

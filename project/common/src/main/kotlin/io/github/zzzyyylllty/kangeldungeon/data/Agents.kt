@@ -17,6 +17,7 @@ import io.github.zzzyyylllty.kangeldungeon.util.region.RegionManager
 import io.github.zzzyyylllty.kangeldungeon.function.kether.evalKether
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
 import io.github.zzzyyylllty.kangeldungeon.util.TargetSelectorHelper
+import io.github.zzzyyylllty.kangeldungeon.function.javascript.Sys
 //import io.github.zzzyyylllty.kangeldungeon.util.jsonUtil
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmJsonUtil
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmLegacyAmpersandUtil
@@ -66,6 +67,7 @@ fun registerExternalData() {
             "DungeonAPI" to KAngelDungeonAPI::class.java,
             "Math" to Math::class.java,
             "System" to System::class.java,
+            "Sys" to Sys,
             "Bukkit" to ScriptBukkitInstance,
             "Gson" to Gson::class.java,
             "TargetSelectorHelper" to TargetSelectorHelper,

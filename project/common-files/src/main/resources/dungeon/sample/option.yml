@@ -8,7 +8,7 @@ display:
     Hello world
 map:
   type: MAP # MAP, SCHEMATIC
-  source: testmap
+  source: sample
   spawn:
     x: 77
     y: -58
@@ -120,7 +120,7 @@ agent:
 
     // [Meta / 元数据] Record start info / 记录开始信息
     instance.setMeta("wave", 1);
-    instance.setMeta("start_time", System.currentTimeMillis());
+    instance.setMeta("start_time", Sys.currentTimeMillis());
 
   # ============ onComplete ============
   # Called when the dungeon is completed / 地牢通关时调用
@@ -140,7 +140,7 @@ agent:
     }
 
     // [Meta / 元数据] Record completion time / 记录通关时间
-    var elapsed = (System.currentTimeMillis() - instance.getMeta("start_time")) / 1000;
+    var elapsed = (Sys.currentTimeMillis() - instance.getMeta("start_time")) / 1000;
     instance.setMeta("completion_time", elapsed);
 
     // [Scoreboard / 计分板] Clean up tags / 清除标签

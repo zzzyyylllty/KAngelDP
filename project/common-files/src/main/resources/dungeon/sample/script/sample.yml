@@ -30,7 +30,7 @@ sample:
 
     // [Meta / 元数据] Record script execution / 记录脚本执行状态
     instance.setMeta("script_run", true);
-    instance.setMeta("start_time", System.currentTimeMillis());
+    instance.setMeta("start_time", Sys.currentTimeMillis());
 
   # onPost: runs after onRun completes / onRun 完成后执行
   onPost: |-

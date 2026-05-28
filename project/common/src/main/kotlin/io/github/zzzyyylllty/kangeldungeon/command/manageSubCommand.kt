@@ -308,6 +308,10 @@ object DungeonCommand {
                     sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                     return@execute
                 }
+                if (KAngelDungeon.maintenanceMode && !sender.hasPermission("kangeldungeon.command.admin")) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonUnderMaintenance"))
+                    return@execute
+                }
                 val uuidStr = context["uuid"]
                 val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
                 if (uuid == null) {
@@ -394,6 +398,10 @@ object DungeonCommand {
             execute<CommandSender> { sender, context, argument ->
                 val player = sender as? Player ?: run {
                     sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
+                    return@execute
+                }
+                if (KAngelDungeon.maintenanceMode && !sender.hasPermission("kangeldungeon.command.admin")) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonUnderMaintenance"))
                     return@execute
                 }
                 val uuidStr = context["uuid"]
@@ -646,6 +654,10 @@ object DungeonCommand {
     }
 
     private fun createDungeonAndStart(sender: CommandSender, templateName: String, leader: Player, extraPlayersStr: String?, difficultyId: String? = null) {
+        if (KAngelDungeon.maintenanceMode && !sender.hasPermission("kangeldungeon.command.admin")) {
+            sender.sendStringAsComponent(sender.asLangText("DungeonUnderMaintenance"))
+            return
+        }
         val template = KAngelDungeon.dungeonTemplates[templateName]
         if (template == null) {
             sender.sendStringAsComponent(sender.asLangText("DungeonTemplateNotExist", templateName))

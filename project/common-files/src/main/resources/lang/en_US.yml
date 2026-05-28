@@ -276,6 +276,7 @@ AdminMaintenanceOff: "<green>Maintenance mode disabled! Players can use dungeons
 AdminMaintenanceUsage: "<red>Usage: /kda maintenance <on|off></red>"
 AdminMaintenanceNotify: "<red>Server maintenance in progress. Dungeon system is temporarily disabled.</red>"
 AdminMaintenanceStatus: "<gray>Maintenance: {0}</gray> | <gray>Use /kda maintenance <on|off> to toggle</gray>"
+DungeonUnderMaintenance: "<red>The dungeon system is currently under maintenance. Please try again later.</red>"
 AdminSavingDungeons: "<yellow>Saving dungeon data...</yellow>"
 AdminSaveSnapshot: " <gray>[{0}] {1} | {2} | {3} players | {4}s</gray>"
 AdminSaveSuccess: "<green>Saved snapshot of {0} dungeon instances.</green>"

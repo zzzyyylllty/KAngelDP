@@ -346,6 +346,8 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     }
 
     fun reloadCustomConfig(async: Boolean = true, onComplete: ((List<io.github.zzzyyylllty.kangeldungeon.data.load.ReloadDiagnostics.Issue>) -> Unit)? = null) {
+        // 在调用线程同步标记重载中，防止 submit 异步块启动前 tick 读取不一致数据
+        isReloading = true
         submit(async) {
             // 清除上次的诊断数据
             io.github.zzzyyylllty.kangeldungeon.data.load.ReloadDiagnostics.clear()
@@ -357,9 +359,6 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                 ketherScriptCache.clear()
                 jsScriptCache.clear()
                 gjsScriptCache.clear()
-
-                // 标记重载中，tick 会跳过此期间的循环
-                isReloading = true
 
                 // 在 async 块内检查活跃实例，避免调用线程和异步线程间的竞态
                 val hasActiveInstances = dungeonInstances.values.any { it.state == DungeonState.PREPARING || it.state == DungeonState.ACTIVE }
