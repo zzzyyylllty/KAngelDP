@@ -106,7 +106,6 @@ object DungeonHelper {
         return try {
             devLog("Creating dungeon world from template: ${template.name}")
 
-            // 检查世界模板是否存在
             val worldTemplate = template.worldTemplate ?: run {
                 severeL("ErrorWorldTemplateNotSpecified", template.name)
                 return null
@@ -121,7 +120,6 @@ object DungeonHelper {
             val worldContainer = Bukkit.getWorldContainer()
             val worldFolder = File(worldContainer, worldName)
 
-            // 检查世界是否已存在（可能来自未清理干净的旧实例）
             val existingWorld = Bukkit.getWorld(worldName)
             if (existingWorld != null) {
                 warningL("WarningWorldAlreadyLoaded", worldName)
@@ -133,6 +131,8 @@ object DungeonHelper {
             }
 
             infoL("InfoCopyingFiles", template.name)
+            // 文件复制在 submitAsync 中进行，避免阻塞主线程
+            // 注意：此方法必须在主线程调用，因为 WorldCreator.createWorld() 需要主线程
             copyWorldFiles(sourceFolder, worldFolder)
 
             val creator = WorldCreator(worldName)
@@ -145,7 +145,6 @@ object DungeonHelper {
                 pvp = template.pvpEnabled
                 isAutoSave = false
 
-                // 应用模板配置
                 setGameRule(org.bukkit.GameRule.KEEP_INVENTORY, template.keepInventory)
                 setGameRule(org.bukkit.GameRule.NATURAL_REGENERATION, template.naturalRegeneration)
             }
@@ -456,6 +455,7 @@ object DungeonHelper {
                 e.printStackTrace()
             } finally {
                 // 无论删除成功与否，都从活跃实例中移除
+                dungeonInstance.players.forEach { KAngelDungeon.playerToInstanceIndex.remove(it, dungeonInstance.uuid) }
                 KAngelDungeon.dungeonInstances.remove(dungeonInstance.uuid)
                 KAngelDungeon.worldInstanceIndex.remove(worldName)
             }
@@ -515,8 +515,8 @@ object DungeonHelper {
         players: Collection<Player>,
         leader: Player,
         meta: Map<String, Any>,
-        onWorldReady: ((UUID) -> Unit)? = null,
-        difficultyId: String? = null
+        difficultyId: String? = null,
+        onWorldReady: ((UUID) -> Unit)? = null
     ): UUID? {
         val uuid = UUID.randomUUID()
         val template = KAngelDungeon.dungeonTemplates[templateName] ?: run {
@@ -571,7 +571,7 @@ object DungeonHelper {
         // 合并难度起始 meta
         if (difficultyId != null) {
             val diffMeta = io.github.zzzyyylllty.kangeldungeon.data.load.getDifficultyGlobalMeta(template.name, difficultyId)
-            finalMeta.putAll(diffMeta)
+            diffMeta.filterValues { it != null }.forEach { (k, v) -> finalMeta[k] = v!! }
             finalMeta["difficulty"] = difficultyId
         }
 
@@ -641,8 +641,14 @@ object DungeonHelper {
         } catch (e: Exception) {
             warningL("WarningPlanExecutionFailed", "stopAllPlans", e.message ?: "Unknown")
         }
+        try {
+            ObstacleManager.restoreBlocks(instance)
+        } catch (e: Exception) {
+            warningL("WarningObstacleCleanupFailed", worldName, e.message ?: "Unknown")
+        }
         KAngelDungeon.dungeonInstances.remove(uuid)
         KAngelDungeon.worldInstanceIndex.remove(worldName)
+        instance.players.forEach { KAngelDungeon.playerToInstanceIndex.remove(it, uuid) }
         instance.players.forEach { playerUUID ->
             playerPreviousLocations.remove(playerUUID)
         }

@@ -64,6 +64,8 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     val dungeonInstances = ConcurrentHashMap<UUID, DungeonInstance>()
     /** worldName → instanceUuid 反向索引，用于 O(1) 查找实例 */
     val worldInstanceIndex = ConcurrentHashMap<String, UUID>()
+    /** playerUUID → instanceUuid 反向索引，用于 O(1) 检查玩家是否已在其他地牢 */
+    val playerToInstanceIndex = ConcurrentHashMap<UUID, UUID>()
     val dungeonTemplates = ConcurrentHashMap<String, DungeonTemplate>()
     val dungeonScripts = ConcurrentHashMap<String, ConcurrentHashMap<String, DungeonScript>>()
     // Per-dungeon configs: dungeonName -> (configId -> config)
@@ -80,6 +82,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     // Global fallback (backward compat)
     val obstacleConfigs = ConcurrentHashMap<String, ObstacleConfig>()
     val monsterConfigs = ConcurrentHashMap<String, MonsterConfig>()
+    val kitConfigs = ConcurrentHashMap<String, KitConfig>()
     val blockRegenMap = ConcurrentHashMap<String, MutableSet<UUID>>()
 
     val dateTimeFormatter: DateTimeFormatter by lazy { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss") }
@@ -175,12 +178,16 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
             }
         }
         dungeonInstances.clear()
+        playerToInstanceIndex.clear()
 
         // 清理队伍系统
         TeamManager.unregisterProvider()
 
         // 关闭所有线程的 GraalJS Context，释放原生内存
         GraalJsUtil.closeCurrentContext()
+
+        // 关闭数据库连接池
+        try { (dataSource as? java.io.Closeable)?.close() } catch (_: Exception) {}
     }
 
     /**
@@ -199,10 +206,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
             val toRemove = mutableListOf<UUID>()
             val now = System.currentTimeMillis()
 
-            // 快照实例集，避免迭代过程中其他线程修改 dungeonInstances 导致竞态
-            val snapshot = dungeonInstances.entries.map { it.key to it.value }
-
-            for ((uuid, instance) in snapshot) {
+            for ((uuid, instance) in dungeonInstances) {
                 when (instance.state) {
                     DungeonState.PREPARING -> {
                         // 触发Tick事件（供外部监听）
@@ -262,7 +266,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                                 if (config.getBoolean("notify.on-timeout", true)) {
                                     instance.sendTitleToAllPlayers(
                                         console.asLangText("DungeonTimeoutTitle"),
-                                        console.asLangText("DungeonTimeoutSubtitle", config.getString("auto-exit-delay", "60")),
+                                        console.asLangText("DungeonTimeoutSubtitle", config.getString("auto-exit-delay", "60") ?: "60"),
                                         10, 80, 20
                                     )
                                     instance.broadcastSound("entity_wither_spawn", 2.0f, 0.5f)
@@ -273,7 +277,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                                 if (config.getBoolean("notify.on-all-dead", true)) {
                                     instance.sendTitleToAllPlayers(
                                         console.asLangText("DungeonAllDeadTitle"),
-                                        console.asLangText("DungeonAllDeadSubtitle", config.getString("auto-exit-delay", "60")),
+                                        console.asLangText("DungeonAllDeadSubtitle", config.getString("auto-exit-delay", "60") ?: "60"),
                                         10, 80, 20
                                     )
                                     instance.broadcastSound("entity_wither_death", 2.0f, 0.5f)
@@ -341,8 +345,11 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
         }
     }
 
-    fun reloadCustomConfig(async: Boolean = true, onComplete: (() -> Unit)? = null) {
+    fun reloadCustomConfig(async: Boolean = true, onComplete: ((List<io.github.zzzyyylllty.kangeldungeon.data.load.ReloadDiagnostics.Issue>) -> Unit)? = null) {
         submit(async) {
+            // 清除上次的诊断数据
+            io.github.zzzyyylllty.kangeldungeon.data.load.ReloadDiagnostics.clear()
+
             try {
                 config.reload()
                 devMode = config.getBoolean("debug", false)
@@ -372,6 +379,8 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                     dungeonDifficultyConfigs.clear()
                     obstacleConfigs.clear()
                     monsterConfigs.clear()
+                    dungeonKitConfigs.clear()
+                    kitConfigs.clear()
                 }
 
                 loadDungeonFiles()
@@ -382,9 +391,12 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                 isReloading = false
             }
 
+            // 收集诊断
+            val diagnostics = io.github.zzzyyylllty.kangeldungeon.data.load.ReloadDiagnostics.collect()
+
             // 重载完成回调（确保在主线程执行）
             if (onComplete != null) {
-                submit { onComplete() }
+                submit { onComplete(diagnostics) }
             }
         }
     }
@@ -486,12 +498,12 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
 
     @SubscribeEvent
     fun lang(event: PlayerSelectLocaleEvent) {
-        event.locale = config.getString("lang", "zh_CN")!!
+        event.locale = config.getString("lang", "zh_CN") ?: "zh_CN"
     }
 
     @SubscribeEvent
     fun lang(event: SystemSelectLocaleEvent) {
-        event.locale = config.getString("lang", "zh_CN")!!
+        event.locale = config.getString("lang", "zh_CN") ?: "zh_CN"
     }
 
 

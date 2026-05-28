@@ -20,26 +20,38 @@ meta:
     sample_meta: 1
 gameplay:
   general:
-    TimeLimit: 600
-    PreparationTime: 10
-    LeaveOnDeath: false
+    timeLimit: 600
+    preparationTime: 10
+    leaveOnDeath: false
+    # Death configuration / 死亡机制配置
+    # mode: RESPAWN (等待复活, 默认) | SPECTATE (旁观模式) | POSSESS (附身观看) | LEAVE (退出地牢)
+    # maxRespawns: 最大复活次数, 0 表示无限制, -1 表示禁止复活
+    # autoRespawnDelay: 自动复活延迟（秒）, 0 表示需手动触发
+    # keepInventoryOnRespawn: 复活时是否保留背包
+    # respawnAtSpawn: 复活后是否传送回出生点
+    death:
+      mode: RESPAWN
+      maxRespawns: 3
+      autoRespawnDelay: 5
+      keepInventoryOnRespawn: false
+      respawnAtSpawn: true
     adventureMode: true
-    MinPlayers: 1
-    MaxPlayers: 5
+    minPlayers: 1
+    maxPlayers: 5
     allowParty: true
-    keep-inventory:
+    keepInventory:
       enabled: true
-      required-lives: false
+      requiredLives: false
     bannedItems:
       - ENDER_PEARL
     # Block placement control / 方块放置控制
-    block-place:
+    blockPlace:
       mode: BLACKLIST          # BLACKLIST / WHITELIST
       list:
         - TNT
         - LAVA_BUCKET
     # Block breaking control / 方块破坏控制
-    block-break:
+    blockBreak:
       mode: BLACKLIST          # BLACKLIST / WHITELIST
       list:
         - TNT
@@ -51,19 +63,19 @@ gameplay:
     timer:
       mode: COUNTDOWN
       start: 600
-vanilla-options:
+vanillaOptions:
   hungry: true
-  HealthRegain:
+  healthRegain:
     food: false
     saturation: false
     potions: false
     other: false
   durability: true
-  items-drop: true
-  items-pickup: true
+  itemsDrop: true
+  itemsPickup: true
   spawnpoint: 77 -58 191
   # Game rules applied on dungeon start / 地牢开始时自动设置的 Minecraft 游戏规则
-  game-rules:
+  gameRules:
     doTileDrops: false
     doDaylightCycle: false
     doWeatherCycle: false
@@ -118,11 +130,14 @@ agent:
     instance.executeCommand("say Congratulations!");
     instance.clearAllPlayersEffects();
 
-    // [Target Selector / 目标选择器] Reward surviving players / 奖励存活玩家
-    var survivors = instance.selectTargets("@all[health>0]");
-    survivors.forEach(function(p) {
-      p.sendMessage(mmUtil.deserialize("<green>You survived!"));
-    });
+    // Reward all online players who survived (not in deadPlayers) / 奖励所有存活玩家
+    var allPlayers = instance.getAllPlayers();
+    for (var i = 0; i < allPlayers.length; i++) {
+      var p = allPlayers[i];
+      if (!instance.isPlayerDeadInDungeon(p.getName())) {
+        p.sendMessage(mmUtil.deserialize("<green>You survived!"));
+      }
+    }
 
     // [Meta / 元数据] Record completion time / 记录通关时间
     var elapsed = (System.currentTimeMillis() - instance.getMeta("start_time")) / 1000;
@@ -140,11 +155,14 @@ agent:
     Bukkit.broadcast(mmUtil.deserialize("<gray>Dungeon <yellow>" + template.name + "</yellow> Failed."));
     instance.respawnAllDeadPlayers();
 
-    // [Target Selector / 目标选择器] Notify dead players / 通知死亡玩家
-    var deads = instance.selectTargets("@all[health<=0]");
-    deads.forEach(function(p) {
-      p.sendMessage(mmUtil.deserialize("<red>Better luck next time!</red>"));
-    });
+    // Notify dead players via deadPlayers set (not unreliable health check) / 通过死亡集合通知
+    var deadNames = instance.getDeadPlayerNames();
+    for (var i = 0; i < deadNames.length; i++) {
+      var p = Bukkit.getPlayerExact(deadNames[i]);
+      if (p != null) {
+        p.sendMessage(mmUtil.deserialize("<red>Better luck next time!</red>"));
+      }
+    }
     instance.removeScoreboardTagFromAllPlayers("in_dungeon");
 
   # ============ onWaveStart (custom / 自定义触发器) ============

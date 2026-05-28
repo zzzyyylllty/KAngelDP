@@ -172,7 +172,15 @@ object KAngelDungeonMainCommand {
         execute<CommandSender> { sender, context, argument ->
             sender.sendStringAsComponent(sender.asLangText("MainReloading"))
             try {
-                reloadCustomConfig(async = true, onComplete = {
+                reloadCustomConfig(async = true, onComplete = { diagnostics ->
+                    if (diagnostics.isEmpty()) {
+                        sender.sendStringAsComponent(sender.asLangText("ReloadDiagnosticsNoIssue"))
+                    } else {
+                        sender.sendStringAsComponent(sender.asLangText("ReloadDiagnosticsHeader", diagnostics.size.toString()))
+                        for (issue in diagnostics) {
+                            sender.sendStringAsComponent(sender.asLangText(issue.key, *issue.args.toTypedArray()))
+                        }
+                    }
                     sender.sendStringAsComponent(sender.asLangText("MainReloaded"))
                 })
             }

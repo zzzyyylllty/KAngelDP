@@ -24,15 +24,15 @@ fun launchText() {
     }
 
     val specialThanks =
-        listOf("MAORI", "NK_XingChen", "Jesuzi", "Blue_ruins(BlueIce)", "Zero", "TheAchu", "CedricHunsen")
+        listOf("NK_XingChen", "Jesuzi", "ChoTenChan/KAngel", "AmeChan")
 
     consoleSender.sendStringAsComponent(" ")
-    consoleSender.sendStringAsComponent("""<gradient:#eecc77:#88aacc>|________                    __   .__                 .__""")
-    consoleSender.sendStringAsComponent("""<gradient:#eecc77:#88aacc>    \_____  \   __ __   ____  _/  |_ |__|_____   ______  |__|  ____    ____""")
-    consoleSender.sendStringAsComponent("""<gradient:#eecc77:#88aacc>/  / \  \ |  |  \_/ __ \ \   __\|  |\__  \  \____ \ |  | /    \ _/ __ \""")
-    consoleSender.sendStringAsComponent("""<gradient:#eecc77:#88aacc>/   \_/.  \|  |  /\  ___/  |  |  |  | / __ \_|  |_> >|  ||   |  \\  ___/""")
-    consoleSender.sendStringAsComponent("""<gradient:#eecc77:#88aacc>\_____\ \_/|____/  \___  > |__|  |__|(____  /|   __/ |__||___|  / \___  >""")
-    consoleSender.sendStringAsComponent("""<gradient:#eecc77:#88aacc>\__>            \/                 \/ |__|             \/      \/""")
+    consoleSender.sendStringAsComponent("""<#56b9ec>  _  __     _                             _   ____    ____  """)
+    consoleSender.sendStringAsComponent("""<#56b9ec> | |/ /    / \     _ __     __ _    ___  | | |  _ \  |  _ \ """)
+    consoleSender.sendStringAsComponent("""<#56b9ec> | ' /    / _ \   | '_ \   / _` |  / _ \ | | | | | | | |_) |""")
+    consoleSender.sendStringAsComponent("""<#a481dc> | . \   / ___ \  | | | | | (_| | |  __/ | | | |_| | |  __/ """)
+    consoleSender.sendStringAsComponent("""<#dc2eb2> |_|\_\ /_/   \_\ |_| |_|  \__, |  \___| |_| |____/  |_|    """)
+    consoleSender.sendStringAsComponent("""<#dc2eb2>                           |___/                             """)
     consoleSender.sendStringAsComponent(" ")
     consoleSender.sendStringWithPrefix("<gold>",consoleSender.asLangText("WelcomeSeries"))
     consoleSender.sendStringWithPrefix("<gold>",consoleSender.asLangText("DesignBy", "<#ff66cc>AkaCandyKAngel</#ff66cc>"))
@@ -43,7 +43,7 @@ fun launchText() {
     consoleSender.sendStringWithPrefix("<#88ccff>", console.asLangText("Welcome2", premiumDisplayName, "${pluginVersion}<reset>", "${runningPlatform.name} - $versionId"))
     consoleSender.sendStringAsComponent(" ")
     consoleSender.sendStringWithPrefix("<#66bbff>", console.asLangText("Welcome3", "https://github.com/zzzyyylllty"))
-    consoleSender.sendStringWithPrefix("<#66bbff>", console.asLangText("Welcome4", "https://github.com/zzzyyylllty/KAngelDungeon"))
+    consoleSender.sendStringWithPrefix("<#66bbff>", console.asLangText("Welcome4", "https://github.com/zzzyyylllty/KAngelDP"))
     consoleSender.sendStringWithPrefix("<#66bbff>", console.asLangText("Welcome5", "https://chotengroup.gitbook.io/kangeldungeon"))
     consoleSender.sendStringAsComponent(" ")
     if (VersionHelper().isKAngelDungeonPremium) consoleSender.sendStringWithPrefix("<gradient:red:yellow:green:aqua:light_purple>", console.asLangText("PremiumVersionWelcome", premiumDisplayName))

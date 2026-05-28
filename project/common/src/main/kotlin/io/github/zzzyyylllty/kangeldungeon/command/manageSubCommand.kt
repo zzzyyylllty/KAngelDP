@@ -69,7 +69,7 @@ object DungeonCommand {
 
     /**
      * 创建并自动开始地牢
-     * /kangeldungeon dungeon create <template> [player]
+     * /kangeldungeon dungeon create <template> [difficulty] [player] [players]
      */
     @CommandBody
     val create = subCommand {
@@ -77,17 +77,29 @@ object DungeonCommand {
             suggestion<CommandSender> { _, _ ->
                 KAngelDungeon.dungeonTemplates.keys.toList()
             }
+            // Only template -> sender as leader, default difficulty
             execute<CommandSender> { sender, context, argument ->
-                sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
+                val leader = sender as? Player ?: run {
+                    sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
+                    return@execute
+                }
+                val defaultDiff = getDefaultDifficulty(context["template"])
+                createDungeonAndStart(sender, context["template"], leader, null, defaultDiff)
             }
-            // /kd dungeon create <template> [difficulty]
+            // template [difficulty] [player] [players]
             dynamic("difficulty", optional = true) {
-                suggestion<CommandSender> { _, _ ->
-                    val template = context["template"]
+                suggestion<CommandSender> { _, args ->
+                    val template = args["template"]
                     KAngelDungeon.dungeonDifficultyConfigs[template]?.keys?.toList() ?: emptyList()
                 }
+                // template difficulty only -> sender as leader
                 execute<CommandSender> { sender, context, argument ->
-                    sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
+                    val leader = sender as? Player ?: run {
+                        sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
+                        return@execute
+                    }
+                    val diff = context["difficulty"].takeIf { it.isNotBlank() }
+                    createDungeonAndStart(sender, context["template"], leader, null, diff)
                 }
                 player("player") {
                     execute<CommandSender> { sender, context, argument ->
@@ -113,14 +125,15 @@ object DungeonCommand {
                     }
                 }
             }
-            // /kd dungeon create <template> (no difficulty, original)
+            // template [player] [players] (no difficulty)
             player("player") {
                 execute<CommandSender> { sender, context, argument ->
                     val leader = context.player("player").castSafely<Player>() ?: run {
                         sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                         return@execute
                     }
-                    createDungeonAndStart(sender, context["template"], leader, null)
+                    val defaultDiff = getDefaultDifficulty(context["template"])
+                    createDungeonAndStart(sender, context["template"], leader, null, defaultDiff)
                 }
                 dynamic("players") {
                     suggestion<CommandSender> { _, _ ->
@@ -131,7 +144,8 @@ object DungeonCommand {
                             sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                             return@execute
                         }
-                        createDungeonAndStart(sender, context["template"], leader, context["players"])
+                        val defaultDiff = getDefaultDifficulty(context["template"])
+                        createDungeonAndStart(sender, context["template"], leader, context["players"], defaultDiff)
                     }
                 }
             }
@@ -224,9 +238,10 @@ object DungeonCommand {
             for ((uuid, instance) in instances) {
                 val stateLabel = sender.stateLabel(instance.state)
                 val elapsed = instance.getElapsedTime().toInt()
+                val diff = instance.getDifficulty() ?: "N/A"
                 sender.sendStringAsComponent(
                     sender.asLangText("DungeonListEntry",
-                        instance.templateName, stateLabel,
+                        instance.templateName, stateLabel, diff,
                         instance.getAlivePlayerCount().toString(), instance.getPlayerCount().toString(),
                         elapsed.toString(), uuid.toString())
                 )
@@ -260,6 +275,10 @@ object DungeonCommand {
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoTemplate", instance.templateName))
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoUUID", uuid.toString()))
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoState", instance.state.name))
+                val diffId = instance.getDifficulty()
+                if (diffId != null) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonInfoDifficulty", diffId))
+                }
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoPlayers", instance.getAlivePlayerCount().toString(), instance.getPlayerCount().toString()))
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoOnlinePlayers", instance.getOnlinePlayerNames().joinToString(", ") { "<green>$it</green>" }))
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoElapsed", instance.getElapsedTime().toInt().toString()))
@@ -344,8 +363,8 @@ object DungeonCommand {
                 sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
                 return@execute
             }
-            // 查找玩家所在的地牢
-            val instance = KAngelDungeon.dungeonInstances.values.firstOrNull { it.players.contains(player.uniqueId) }
+            val instanceUuid = KAngelDungeon.playerToInstanceIndex[player.uniqueId]
+            val instance = if (instanceUuid != null) KAngelDungeon.dungeonInstances[instanceUuid] else null
             if (instance == null) {
                 sender.sendStringAsComponent(sender.asLangText("DungeonNotInDungeon"))
                 return@execute
@@ -457,7 +476,8 @@ object DungeonCommand {
                     sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                     return@execute
                 }
-                val instance = KAngelDungeon.dungeonInstances.values.firstOrNull { it.players.contains(target.uniqueId) }
+                val instanceUuid = KAngelDungeon.playerToInstanceIndex[target.uniqueId]
+                val instance = if (instanceUuid != null) KAngelDungeon.dungeonInstances[instanceUuid] else null
                 if (instance == null) {
                     sender.sendStringAsComponent(sender.asLangText("DungeonPlayerNotInDungeon"))
                     return@execute
@@ -487,7 +507,8 @@ object DungeonCommand {
                 sender.sendStringAsComponent(sender.asLangText("DungeonNoPermissionForceLeave"))
                 return@execute
             }
-            val instance = KAngelDungeon.dungeonInstances.values.firstOrNull { it.players.contains(player.uniqueId) }
+            val instanceUuid = KAngelDungeon.playerToInstanceIndex[player.uniqueId]
+            val instance = if (instanceUuid != null) KAngelDungeon.dungeonInstances[instanceUuid] else null
             if (instance == null) {
                 sender.sendStringAsComponent(sender.asLangText("DungeonNotInDungeon"))
                 return@execute
@@ -514,7 +535,8 @@ object DungeonCommand {
                     sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                     return@execute
                 }
-                val instance = KAngelDungeon.dungeonInstances.values.firstOrNull { it.players.contains(target.uniqueId) }
+                val instanceUuid = KAngelDungeon.playerToInstanceIndex[target.uniqueId]
+                val instance = if (instanceUuid != null) KAngelDungeon.dungeonInstances[instanceUuid] else null
                 if (instance == null) {
                     sender.sendStringAsComponent(sender.asLangText("DungeonPlayerNotInDungeon"))
                     return@execute
@@ -615,6 +637,13 @@ object DungeonCommand {
     }
 
     // ==================== 辅助方法 ====================
+
+    /** 获取模板的默认难度：优先取 "normal"，否则取第一个，没有则返回 null */
+    private fun getDefaultDifficulty(templateName: String): String? {
+        val difficulties = KAngelDungeon.dungeonDifficultyConfigs[templateName] ?: return null
+        if (difficulties.isEmpty()) return null
+        return if (difficulties.containsKey("normal")) "normal" else difficulties.keys.firstOrNull()
+    }
 
     private fun createDungeonAndStart(sender: CommandSender, templateName: String, leader: Player, extraPlayersStr: String?, difficultyId: String? = null) {
         val template = KAngelDungeon.dungeonTemplates[templateName]

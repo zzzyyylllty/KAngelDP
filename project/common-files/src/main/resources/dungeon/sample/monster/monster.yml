@@ -3,7 +3,8 @@
 zombies:
   active: true                         # default activation state / 默认激活状态
   respawnCooldown: 0                   # ticks between respawns (0 = no auto-respawn) / 重生冷却(tick)
-  activationRange: -1                  # activation distance (-1 = infinite) / 激活距离
+  activationRangeMin: 0                # minimum activation distance (0 = no min) / 最小激活距离
+  activationRangeMax: -1              # maximum activation distance (-1 = infinite) / 最大激活距离
   priority: 0                          # spawn priority, higher = spawned first / 生成优先级
   monsters:
     - mob: minecraft:zombie       # minecraft: prefix for vanilla mobs

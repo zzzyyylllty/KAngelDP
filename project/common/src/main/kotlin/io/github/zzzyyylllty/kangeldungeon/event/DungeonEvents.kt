@@ -33,6 +33,9 @@ class DungeonFailPostEvent(val instance: DungeonInstance, override val allowCanc
 /** 地牢玩家死亡时，不可取消 */
 class DungeonPlayerDeathEvent(val instance: DungeonInstance, val player: Player, override val allowCancelled: Boolean = false) : BukkitProxyEvent()
 
+/** 地牢玩家复活时，不可取消 */
+class DungeonPlayerRespawnEvent(val instance: DungeonInstance, val player: Player, override val allowCancelled: Boolean = false) : BukkitProxyEvent()
+
 /** 地牢准备倒计时每秒触发一次 */
 class DungeonTickEvent(val instance: DungeonInstance, override val allowCancelled: Boolean = false) : BukkitProxyEvent()
 

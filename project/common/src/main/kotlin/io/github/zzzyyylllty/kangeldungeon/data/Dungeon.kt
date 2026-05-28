@@ -165,6 +165,9 @@ class DungeonInstance(
     // 统计信息
     var meta: DungeonMeta,
 
+    // 玩家元数据（每个地牢实例独立，不持久化）
+    val playerMeta: ConcurrentHashMap<UUID, DungeonMeta> = ConcurrentHashMap(),
+
     // 位置信息
     val spawnLocation: Location,
 
@@ -220,11 +223,10 @@ class DungeonInstance(
             return false
         }
 
-        // 2. 检查玩家是否已在其他活跃地牢中
-        for ((otherUuid, otherInstance) in KAngelDungeon.dungeonInstances.entries.toList()) {
-            if (otherUuid != uuid && otherInstance.players.contains(player.uniqueId)) {
-                return false
-            }
+        // 2. 检查玩家是否已在其他活跃地牢中（O(1) 反向索引）
+        val existingInstance = KAngelDungeon.playerToInstanceIndex[player.uniqueId]
+        if (existingInstance != null && existingInstance != uuid) {
+            return false
         }
 
         // 3. 触发 Pre 事件 (可取消)
@@ -236,7 +238,9 @@ class DungeonInstance(
         val added = players.add(player.uniqueId)
 
         if (added) {
-            // 5. 缓存玩家进入地牢前的位置
+            // 5. 更新反向索引
+            KAngelDungeon.playerToInstanceIndex[player.uniqueId] = uuid
+            // 6. 缓存玩家进入地牢前的位置
             DungeonHelper.playerPreviousLocations[player.uniqueId] = player.location.clone()
             // 6. 传送玩家到地牢出生点
             player.teleport(spawnLocation)
@@ -290,7 +294,11 @@ class DungeonInstance(
         val removed = players.remove(player.uniqueId)
 
         if (removed) {
-            // 3. 从死亡名单中清除
+            // 3. 清理反向索引
+            KAngelDungeon.playerToInstanceIndex.remove(player.uniqueId, uuid)
+            // 3.5 清理玩家元数据
+            clearPlayerMeta(player)
+            // 4. 从死亡名单中清除
             deadPlayers.remove(player.uniqueId)
             // 4. 传送玩家回到进入地牢前的位置
             try {
@@ -579,7 +587,9 @@ class DungeonInstance(
      * 是否超时
      */
     fun isTimedOut(template: DungeonTemplate): Boolean {
-        return template.timeLimit?.let { getElapsedTime() >= it } ?: false
+        val limit = template.timeLimit ?: return false
+        if (limit <= 0) return false
+        return getElapsedTime() >= limit
     }
 
     /**
@@ -588,7 +598,7 @@ class DungeonInstance(
      * 防止掉线和死亡导致的死锁。
      */
     fun areAllPlayersDead(): Boolean {
-        if (players.isEmpty()) return false
+        if (players.isEmpty()) return state == DungeonState.ACTIVE
         return players.all { it in deadPlayers || Bukkit.getPlayer(it) == null }
     }
 
@@ -921,13 +931,15 @@ class DungeonInstance(
      * @return 是否成功找到并执行了Kit
      */
     fun openKit(kitName: String, player: Player): Boolean {
-        val configs = KAngelDungeon.dungeonKitConfigs[templateName] ?: return false
-        val kit = configs[kitName] ?: return false
+        val kit = KAngelDungeon.kitConfigs[kitName]
+            ?: KAngelDungeon.dungeonKitConfigs[templateName]?.get(kitName)
+            ?: return false
 
         val rewards = if (kit.isChanceMode) {
             io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.rewardsByChance(kit.rewards)
         } else {
-            val count = kotlin.random.Random.nextInt(kit.minRewards, kit.maxRewards + 1)
+            val safeMax = kit.maxRewards.coerceAtLeast(kit.minRewards)
+            val count = kotlin.random.Random.nextInt(kit.minRewards, safeMax + 1)
             io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.rollRewards(kit.rewards, count)
         }
 
@@ -942,8 +954,9 @@ class DungeonInstance(
      * @return 是否成功找到Kit
      */
     fun openKitToAll(kitName: String): Boolean {
-        val configs = KAngelDungeon.dungeonKitConfigs[templateName] ?: return false
-        val kit = configs[kitName] ?: return false
+        val kit = KAngelDungeon.kitConfigs[kitName]
+            ?: KAngelDungeon.dungeonKitConfigs[templateName]?.get(kitName)
+            ?: return false
         val players = getOnlinePlayers()
 
         if (kit.isChanceMode) {
@@ -951,7 +964,8 @@ class DungeonInstance(
                 openKit(kitName, player)
             }
         } else {
-            val count = kotlin.random.Random.nextInt(kit.minRewards, kit.maxRewards + 1)
+            val safeMax = kit.maxRewards.coerceAtLeast(kit.minRewards)
+            val count = kotlin.random.Random.nextInt(kit.minRewards, safeMax + 1)
             val rewards = io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.rollRewards(kit.rewards, count)
             for (player in players) {
                 executeKitForPlayer(kit, kitName, rewards, player)
@@ -998,15 +1012,17 @@ class DungeonInstance(
         if (preEvent.isCancelled) return false
 
         // 4. 执行奖励
+        var anySuccess = false
         for (reward in rewards) {
-            io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.executeReward(reward, player, this)
+            val ok = io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.executeReward(reward, player, this)
+            if (ok) anySuccess = true
         }
 
         // 5. Post事件
         io.github.zzzyyylllty.kangeldungeon.event.KitOpenPostEvent(this, kitName, player, kit, rewards).call()
 
-        // 6. 应用冷却
-        if (kit.cooldown > 0) {
+        // 6. 应用冷却（仅在至少一个奖励成功执行时才设置冷却）
+        if (anySuccess && kit.cooldown > 0) {
             io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.applyCooldown(player, templateName, kitName, kit.cooldown)
         }
 
@@ -1364,20 +1380,91 @@ class DungeonInstance(
     }
 
     /**
+     * 复活指定玩家（传送回出生点、满血、移除死亡状态）
+     * JS: instance.respawnPlayer("Notch")
+     * @return 是否成功复活
+     */
+    fun respawnPlayer(playerName: String): Boolean {
+        val player = Bukkit.getPlayerExact(playerName) ?: return false
+        if (player.uniqueId !in deadPlayers) return false
+
+        // 检查复活次数限制
+        val config = getTemplate()?.gameplayGeneral?.death ?: DeathConfig()
+        if (config.maxRespawns > 0) {
+            val count = getPlayerRespawnCount(playerName)
+            if (count >= config.maxRespawns) return false
+        }
+
+        deadPlayers.remove(player.uniqueId)
+        meta.add("player.respawn.${playerName}", 1)
+
+        // 退出旁观模式
+        if (player.gameMode == GameMode.SPECTATOR) {
+            player.gameMode = GameMode.ADVENTURE
+        }
+
+        // 复活处理
+        if (config.respawnAtSpawn) {
+            player.teleport(spawnLocation)
+        }
+        if (!config.keepInventoryOnRespawn && getTemplate()?.keepInventoryConfig?.enabled != true) {
+            // 默认清除：InventoryHandler 会处理 keepInventory，这里只处理特殊情况
+        }
+        player.health = player.maxHealth
+        player.foodLevel = 20
+        player.saturation = 5.0f
+        player.fireTicks = 0
+        player.activePotionEffects.toList().forEach { player.removePotionEffect(it.type) }
+
+        DungeonPlayerRespawnEvent(this, player).call()
+        return true
+    }
+
+    /**
+     * 获取玩家已使用的复活次数（通过 meta 追踪）
+     * JS: var count = instance.getPlayerRespawnCount("Notch")
+     */
+    fun getPlayerRespawnCount(playerName: String): Int {
+        return meta.getAsInt("player.respawn.$playerName") ?: 0
+    }
+
+    /**
      * 复活所有已死亡的在线玩家（传送回出生点、满血、移除死亡状态）
      * JS: instance.respawnAllDeadPlayers()
      */
     fun respawnAllDeadPlayers() {
-        val toRespawn = deadPlayers.filter { Bukkit.getPlayer(it) != null }.toSet()
-        deadPlayers.removeAll(toRespawn)
-        for (uuid in toRespawn) {
-            val player = Bukkit.getPlayer(uuid) ?: continue
-            player.teleport(spawnLocation)
-            player.health = player.maxHealth
-            player.foodLevel = 20
-            player.saturation = 5.0f
-            player.fireTicks = 0
+        val toRespawn = deadPlayers.mapNotNull { Bukkit.getPlayer(it)?.name }.toList()
+        for (name in toRespawn) {
+            respawnPlayer(name)
         }
+    }
+
+    /**
+     * 设置玩家为旁观模式（死后自由飞行观看）
+     * JS: instance.setSpectateMode("Notch")
+     */
+    fun setSpectateMode(playerName: String): Boolean {
+        val player = Bukkit.getPlayerExact(playerName) ?: return false
+        player.gameMode = GameMode.SPECTATOR
+        return true
+    }
+
+    /**
+     * 强制玩家附身观看另一个玩家（旁观模式 + 传送并锁定视角）
+     * JS: instance.possessPlayer("dead_player", "alive_target")
+     * @param targetName 附身目标玩家名称，null 则随机选一个存活队友
+     */
+    fun possessPlayer(playerName: String, targetName: String? = null): Boolean {
+        val player = Bukkit.getPlayerExact(playerName) ?: return false
+        val target = if (targetName != null) {
+            Bukkit.getPlayerExact(targetName)
+        } else {
+            getOnlinePlayers().filter { it.uniqueId !in deadPlayers && it.uniqueId != player.uniqueId }.randomOrNull()
+        } ?: return false
+
+        player.gameMode = GameMode.SPECTATOR
+        player.spectatorTarget = target
+        return true
     }
 
     /**
@@ -1692,6 +1779,30 @@ class DungeonInstance(
      */
     fun setMonsterCooldown(monsterId: String, cooldownTicks: Long) {
         MonsterManager.setMonsterCooldown(this, monsterId, cooldownTicks)
+    }
+
+    /**
+     * 设置怪物组最小激活距离（方块），null 恢复 config 默认
+     * JS: instance.setMonsterActivationRangeMin("zombies", 5.0)
+     */
+    fun setMonsterActivationRangeMin(monsterId: String, value: Double?) {
+        MonsterManager.setMonsterActivationRangeMin(this, monsterId, value)
+    }
+
+    /**
+     * 设置怪物组最大激活距离（方块），null 恢复 config 默认
+     * JS: instance.setMonsterActivationRangeMax("zombies", 30.0)
+     */
+    fun setMonsterActivationRangeMax(monsterId: String, value: Double?) {
+        MonsterManager.setMonsterActivationRangeMax(this, monsterId, value)
+    }
+
+    /**
+     * 重置怪物组激活距离为 config 默认值
+     * JS: instance.resetMonsterActivationRange("zombies")
+     */
+    fun resetMonsterActivationRange(monsterId: String) {
+        MonsterManager.resetMonsterActivationRange(this, monsterId)
     }
 
     /**
@@ -2228,6 +2339,94 @@ class DungeonInstance(
      */
     fun hasMeta(key: String): Boolean {
         return meta.get(key) != null
+    }
+
+    // ==================== 玩家元数据 ====================
+
+    private fun getOrCreatePlayerMeta(player: Player): DungeonMeta {
+        return playerMeta.computeIfAbsent(player.uniqueId) { DungeonMeta(ConcurrentHashMap()) }
+    }
+
+    /**
+     * 设置玩家元数据
+     * JS: instance.setPlayerMeta(player, "score", 100)
+     */
+    fun setPlayerMeta(player: Player, key: String, value: Any?) {
+        getOrCreatePlayerMeta(player).set(key, value)
+    }
+
+    /**
+     * 增加玩家元数据（数值累加）
+     * JS: instance.addPlayerMeta(player, "score", 10)
+     */
+    fun addPlayerMeta(player: Player, key: String, value: Any?) {
+        getOrCreatePlayerMeta(player).add(key, value)
+    }
+
+    /**
+     * 获取玩家元数据
+     * JS: var score = instance.getPlayerMeta(player, "score")
+     */
+    fun getPlayerMeta(player: Player, key: String): Any? {
+        return playerMeta[player.uniqueId]?.get(key)
+    }
+
+    /**
+     * JS: var score = instance.getPlayerMetaAsInt(player, "score")
+     */
+    fun getPlayerMetaAsInt(player: Player, key: String): Int? {
+        return playerMeta[player.uniqueId]?.getAsInt(key)
+    }
+
+    /**
+     * JS: var score = instance.getPlayerMetaAsDouble(player, "score")
+     */
+    fun getPlayerMetaAsDouble(player: Player, key: String): Double? {
+        return playerMeta[player.uniqueId]?.getAsDouble(key)
+    }
+
+    /**
+     * JS: var name = instance.getPlayerMetaAsString(player, "title")
+     */
+    fun getPlayerMetaAsString(player: Player, key: String): String? {
+        return playerMeta[player.uniqueId]?.getAsString(key)
+    }
+
+    /**
+     * JS: var flag = instance.getPlayerMetaAsBoolean(player, "flag")
+     */
+    fun getPlayerMetaAsBoolean(player: Player, key: String): Boolean? {
+        return playerMeta[player.uniqueId]?.getAsBoolean(key)
+    }
+
+    /**
+     * 检查玩家元数据是否存在
+     * JS: var has = instance.hasPlayerMeta(player, "score")
+     */
+    fun hasPlayerMeta(player: Player, key: String): Boolean {
+        return playerMeta[player.uniqueId]?.get(key) != null
+    }
+
+    /**
+     * 删除玩家元数据
+     * JS: instance.removePlayerMeta(player, "score")
+     */
+    fun removePlayerMeta(player: Player, key: String) {
+        playerMeta[player.uniqueId]?.remove(key)
+    }
+
+    /**
+     * 清除玩家所有元数据（玩家离开地牢时调用）
+     */
+    fun clearPlayerMeta(player: Player) {
+        playerMeta.remove(player.uniqueId)
+    }
+
+    /**
+     * 清除所有玩家元数据（地牢实例销毁时调用）
+     */
+    fun clearAllPlayerMeta() {
+        playerMeta.clear()
     }
 }
 

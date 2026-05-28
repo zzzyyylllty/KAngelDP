@@ -33,15 +33,15 @@ object CastHelper {
         if (first == null) return second
         if (second == null) return first
         return if (first is Int) {
-            first.plus((second.toString().toIntOrNull()) ?: return first.toString().plus(second.toString()))
+            first.plus((second.toString().toIntOrNull()) ?: return first)
         } else if (first is Double) {
-            first.plus((second.toString().toDoubleOrNull()) ?: return first.toString().plus(second.toString()))
+            first.plus((second.toString().toDoubleOrNull()) ?: return first)
         } else if (first is Float) {
-            first.plus((second.toString().toFloatOrNull()) ?: return first.toString().plus(second.toString()))
+            first.plus((second.toString().toFloatOrNull()) ?: return first)
+        } else if (first is Long) {
+            first.plus((second.toString().toLongOrNull()) ?: return first)
         } else if (first is String) {
             first.plus(second.toString())
-        } else if (first is Long) {
-            first.plus((second.toString().toLongOrNull()) ?: return first.toString().plus(second.toString()))
         } else {
             first.toString().plus(second.toString())
         }

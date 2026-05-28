@@ -31,7 +31,7 @@ taboolib {
     // relocate("de.tr7zw.changeme.nbtapi","io.github.zzzyyylllty.kangeldungeon.dep.nbtapi")
     relocate("io.github.projectunified.uniitem","io.github.zzzyyylllty.kangeldungeon.dep.uniitem")
     relocate("com.fasterxml.jackson","io.github.zzzyyylllty.kangeldungeon.dep.jackson")
-    relocate("com.mojang.datafixers","io.github.zzzyyylllty.kangeldungeon.dep.datafixers")
+//    relocate("com.mojang.datafixers","io.github.zzzyyylllty.kangeldungeon.dep.datafixers")
     relocate("io.netty.handler.codec.http", "io.github.zzzyyylllty.kangeldungeon.dep.http")
     relocate("io.netty.handler.codec.rtsp", "io.github.zzzyyylllty.kangeldungeon.dep.rtsp")
     relocate("io.netty.handler.codec.spdy", "io.github.zzzyyylllty.kangeldungeon.dep.spdy")

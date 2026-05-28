@@ -45,6 +45,9 @@ fun loadDungeonFiles() {
         warningL("NoDungeonFiles")
         return
     }
+    // 加载全局Kit（所有地牢通用）
+    loadGlobalKitFiles()
+
     for (file in files) {
         // 如果是目录，加载其中的文件
         if (file.isDirectory) {
@@ -118,6 +121,8 @@ fun loadDungeonFile(file: File) {
             val dungeonName = file.parentFile.name
             loadDungeon(dungeonName, map, file.parentFile.name)
             devLog("Loaded dungeon template from option.yml: $dungeonName")
+        } else {
+            ReloadDiagnostics.error("ReloadErrorFileParse", file.absolutePath)
         }
         return
     }
@@ -161,9 +166,15 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     val mapConfig = arg["map"] as? Map<String, Any?> ?: emptyMap()
     val mapType = mapConfig["type"] as? String ?: "MAP"
     val source = mapConfig["source"] as? String
+    if (source == null) {
+        ReloadDiagnostics.error("ReloadErrorMapSource", key)
+    }
     val schematicFile = if (mapType.equals("SCHEMATIC", ignoreCase = true)) source else null
     val worldTemplate = if (mapType.equals("MAP", ignoreCase = true)) source else null
     val spawnConfig = (mapConfig["spawn"]) as? Map<String, Any?> ?: emptyMap()
+    if (spawnConfig.isEmpty()) {
+        ReloadDiagnostics.warn("ReloadWarnMapSpawn", key)
+    }
     val spawnVector = Vector(
         (spawnConfig["x"] as? Number)?.toDouble() ?: 0.0,
         (spawnConfig["y"] as? Number)?.toDouble() ?: 100.0,
@@ -180,24 +191,31 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     val gameplay = arg["gameplay"] as? Map<String, Any?> ?: emptyMap()
     val general = gameplay["general"] as? Map<String, Any?> ?: emptyMap()
 
-    val timeLimit = (general["TimeLimit"] as? Number)?.toDouble() ?: 3600.0
-    val preparationTime = (general["PreparationTime"] as? Number)?.toDouble() ?: 30.0
-    val allowRespawn = general["AllowRespawn"] as? Boolean ?: false
-    val keepInventory = general["KeepInventory"] as? Boolean ?: false
-    val pvpEnabled = general["PvPEnabled"] as? Boolean ?: false
-    val requiredPermission = general["RequiredPermission"] as? String
+    val timeLimit = (general["timeLimit"] as? Number)?.toDouble() ?: 3600.0
+    val preparationTime = (general["preparationTime"] as? Number)?.toDouble() ?: 30.0
+    val allowRespawn = general["allowRespawn"] as? Boolean ?: false
+    val pvpEnabled = general["pvpEnabled"] as? Boolean ?: false
+    val requiredPermission = general["requiredPermission"] as? String
 
-    // 解析 keep-inventory 详细配置
-    val keepInvSection = general["keep-inventory"] as? Map<String, Any?>
-    val keepInventoryConfig = KeepInventoryConfig(
-        enabled = (keepInvSection?.get("enabled") as? Boolean) ?: keepInventory,
-        requiredLives = (keepInvSection?.get("required-lives") as? Boolean) ?: false
-    )
+    // keepInventory 支持 Boolean 简写或详细 Map 配置
+    val keepInventoryRaw = general["keepInventory"]
+    val keepInventoryConfig = when (keepInventoryRaw) {
+        is Map<*, *> -> {
+            @Suppress("UNCHECKED_CAST")
+            val map = keepInventoryRaw as Map<String, Any?>
+            KeepInventoryConfig(
+                enabled = map["enabled"] as? Boolean ?: false,
+                requiredLives = map["requiredLives"] as? Boolean ?: false
+            )
+        }
+        is Boolean -> KeepInventoryConfig(enabled = keepInventoryRaw, requiredLives = false)
+        else -> KeepInventoryConfig()
+    }
 
     // 解析 bannedItems
     val bannedItems = (general["bannedItems"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
 
-    // 解析 block-place / block-break 控制
+    // 解析 blockPlace / blockBreak 控制
     fun parseBlockControl(section: Map<String, Any?>?): BlockControlConfig {
         if (section == null) return BlockControlConfig()
         val mode = try {
@@ -206,15 +224,19 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
         val list = (section["list"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
         return BlockControlConfig(mode = mode, list = list)
     }
-    val blockPlace = parseBlockControl(general["block-place"] as? Map<String, Any?>)
-    val blockBreak = parseBlockControl(general["block-break"] as? Map<String, Any?>)
+    val blockPlace = parseBlockControl(general["blockPlace"] as? Map<String, Any?>)
+    val blockBreak = parseBlockControl(general["blockBreak"] as? Map<String, Any?>)
 
     // 解析 gameplay.general 其他字段
-    val leaveOnDeath = general["LeaveOnDeath"] as? Boolean ?: false
+    val leaveOnDeath = general["leaveOnDeath"] as? Boolean ?: false
     val adventureMode = general["adventureMode"] as? Boolean ?: true
-    val minPlayers = (general["MinPlayers"] as? Number)?.toInt() ?: 1
-    val maxPlayers = (general["MaxPlayers"] as? Number)?.toInt() ?: 5
+    val minPlayers = (general["minPlayers"] as? Number)?.toInt() ?: 1
+    val maxPlayers = (general["maxPlayers"] as? Number)?.toInt() ?: 5
     val allowParty = general["allowParty"] as? Boolean ?: true
+
+    // 解析 Death 配置
+    val deathSection = general["death"] as? Map<String, Any?>
+    val deathConfig = parseDeathConfig(deathSection)
 
     // ===== 解析 commands =====
     val commandsSection = gameplay["commands"] as? Map<String, Any?> ?: emptyMap()
@@ -231,15 +253,15 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     } catch (_: IllegalArgumentException) { TimerMode.COUNTDOWN }
     val timerStart = (timerSection["start"] as? Number)?.toInt() ?: 600
 
-    // ===== 解析 vanilla-options =====
-    val vanillaSection = arg["vanilla-options"] as? Map<String, Any?> ?: emptyMap()
+    // ===== 解析 vanillaOptions =====
+    val vanillaSection = arg["vanillaOptions"] as? Map<String, Any?> ?: emptyMap()
     val hungry = vanillaSection["hungry"] as? Boolean ?: true
     val durability = vanillaSection["durability"] as? Boolean ?: true
-    val itemsDrop = vanillaSection["items-drop"] as? Boolean ?: true
-    val itemsPickup = vanillaSection["items-pickup"] as? Boolean ?: true
+    val itemsDrop = vanillaSection["itemsDrop"] as? Boolean ?: true
+    val itemsPickup = vanillaSection["itemsPickup"] as? Boolean ?: true
 
-    // 解析 HealthRegain 子项
-    val healthRegainSection = vanillaSection["HealthRegain"] as? Map<String, Any?>
+    // 解析 healthRegain 子项
+    val healthRegainSection = vanillaSection["healthRegain"] as? Map<String, Any?>
     val healthRegainConfig = HealthRegainConfig(
         food = (healthRegainSection?.get("food") as? Boolean) ?: false,
         saturation = (healthRegainSection?.get("saturation") as? Boolean) ?: false,
@@ -253,8 +275,8 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     val spawnpointStr = vanillaSection["spawnpoint"] as? String
     val spawnpointVector = parseSpawnpointString(spawnpointStr)
 
-    // ===== 解析 game-rules（游戏规则） =====
-    val gameRules: Map<String, Any> = (vanillaSection["game-rules"] as? Map<String, Any?>)?.mapValues { (_, v) ->
+    // ===== 解析 gameRules（游戏规则） =====
+    val gameRules: Map<String, Any> = (vanillaSection["gameRules"] as? Map<String, Any?>)?.mapValues { (_, v) ->
         when (v) {
             is Boolean -> v
             is Number -> v.toInt()
@@ -300,7 +322,8 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
             keepInventory = keepInventoryConfig,
             bannedItems = bannedItems,
             blockPlace = blockPlace,
-            blockBreak = blockBreak
+            blockBreak = blockBreak,
+        death = deathConfig
         ),
         commandConfig = CommandConfig(
             mode = commandMode,
@@ -365,7 +388,10 @@ fun loadDungeonScriptFile(file: File) {
     }
 
     val dungeonId = file.parentFile.parentFile.name
-    val map = multiExtensionLoader(file) ?: return
+    val map = multiExtensionLoader(file) ?: run {
+        ReloadDiagnostics.warn("ReloadWarnFileParse", file.absolutePath)
+        return
+    }
 
     val dungeonScriptMap = KAngelDungeon.dungeonScripts.getOrPut(dungeonId) { ConcurrentHashMap() }
 
@@ -378,6 +404,9 @@ fun loadDungeonScriptFile(file: File) {
             onRun = scriptData["onRun"] as? String,
             onPost = scriptData["onPost"] as? String
         )
+        if (script.onRun == null && script.onPost == null) {
+            ReloadDiagnostics.warn("ReloadWarnScriptNoop", dungeonId, scriptName)
+        }
         dungeonScriptMap[scriptName] = script
         devLog("Loaded dungeon script: $dungeonId/$scriptName")
     }
@@ -401,6 +430,8 @@ fun loadDungeonMonsterFile(dungeonName: String, file: File) {
         if (config != null) {
             dungeonMap[key] = config
             devLog("Loaded per-dungeon monster: $dungeonName/$key")
+        } else {
+            ReloadDiagnostics.warn("ReloadWarnMonsterParse", dungeonName, key)
         }
     }
 }
@@ -423,6 +454,8 @@ fun loadDungeonObstacleFile(dungeonName: String, file: File) {
         if (config != null) {
             dungeonMap[key] = config
             devLog("Loaded per-dungeon obstacle: $dungeonName/$key")
+        } else {
+            ReloadDiagnostics.warn("ReloadWarnObstacleParse", dungeonName, key)
         }
     }
 }
@@ -445,6 +478,8 @@ fun loadDungeonInteractFile(dungeonName: String, file: File) {
         if (config != null) {
             dungeonMap[key] = config
             devLog("Loaded per-dungeon interact: $dungeonName/$key")
+        } else {
+            ReloadDiagnostics.warn("ReloadWarnInteractParse", dungeonName, key)
         }
     }
 }
@@ -480,6 +515,9 @@ fun loadDungeonPlanFile(dungeonName: String, file: File) {
         val agentSection = data["agent"] as? Map<String, Any?>
         val onRun = agentSection?.get("onRun") as? String
 
+        if (onRun == null) {
+            ReloadDiagnostics.warn("ReloadWarnPlanNoRun", dungeonName, planName)
+        }
         val plan = Plan(
             name = planName,
             trigger = trigger,
@@ -519,6 +557,8 @@ fun loadDungeonRegionFile(dungeonName: String, file: File) {
         if (config != null) {
             dungeonMap[key] = config
             devLog("Loaded per-dungeon region: $dungeonName/$key")
+        } else {
+            ReloadDiagnostics.warn("ReloadWarnRegionParse", dungeonName, key)
         }
     }
 }
@@ -601,6 +641,8 @@ fun loadDungeonTaskFile(dungeonName: String, file: File) {
         if (taskConfig != null) {
             dungeonMap[key] = taskConfig
             devLog("Loaded dungeon task: $dungeonName/$key")
+        } else {
+            ReloadDiagnostics.warn("ReloadWarnTaskParse", dungeonName, key)
         }
     }
 }
@@ -656,6 +698,10 @@ fun loadDungeonDifficultyFile(dungeonName: String, file: File) {
     }
     val map = multiExtensionLoader(file) ?: return
     val difficultiesSection = map["difficulties"] as? Map<String, Any?> ?: return
+    if (difficultiesSection.isEmpty()) {
+        ReloadDiagnostics.warn("ReloadWarnDifficultyEmpty", dungeonName)
+        return
+    }
     val dungeonMap = KAngelDungeon.dungeonDifficultyConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
 
     for (entry in difficultiesSection.entries) {
@@ -702,4 +748,28 @@ fun getDifficultyGlobalMeta(dungeonName: String, difficultyId: String?): Map<Str
     val diffConfig = KAngelDungeon.dungeonDifficultyConfigs[dungeonName]?.get(difficultyId) ?: return emptyMap()
     @Suppress("UNCHECKED_CAST")
     return (diffConfig.meta["global"] as? Map<String, Any?>) ?: emptyMap()
+}
+
+private fun parseDeathConfig(section: Map<String, Any?>?): DeathConfig {
+    if (section == null) {
+        return DeathConfig()
+    }
+    val modeStr = section["mode"] as? String ?: "RESPAWN"
+    val mode = try {
+        DeathMode.valueOf(modeStr.uppercase())
+    } catch (_: IllegalArgumentException) {
+        ReloadDiagnostics.warn("ReloadWarnDeathMode", modeStr)
+        DeathMode.RESPAWN
+    }
+    val maxRespawns = (section["maxRespawns"] as? Number)?.toInt() ?: 0
+    val autoRespawnDelay = (section["autoRespawnDelay"] as? Number)?.toInt() ?: 0
+    val keepInventoryOnRespawn = section["keepInventoryOnRespawn"] as? Boolean ?: false
+    val respawnAtSpawn = section["respawnAtSpawn"] as? Boolean ?: true
+    return DeathConfig(
+        mode = mode,
+        maxRespawns = maxRespawns,
+        autoRespawnDelay = autoRespawnDelay,
+        keepInventoryOnRespawn = keepInventoryOnRespawn,
+        respawnAtSpawn = respawnAtSpawn
+    )
 }

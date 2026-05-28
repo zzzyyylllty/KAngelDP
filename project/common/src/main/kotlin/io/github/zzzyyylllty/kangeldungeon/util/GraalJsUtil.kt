@@ -8,6 +8,7 @@ import org.graalvm.polyglot.HostAccess
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.Value
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import javax.script.*
 import kotlin.String
 
@@ -52,10 +53,24 @@ object GraalJsUtil {
     /**
      * 每个线程缓存一个 GraalVM Context，避免重复创建（创建 Context 开销大）。
      * GraalVM Context 不是线程安全的，因此使用 ThreadLocal 确保每个线程有自己的实例。
+     * allContexts 用于追踪所有活跃 context，防止被 eviction 关闭的 context 被重用。
      */
-    private val contextThreadLocal = ThreadLocal.withInitial { newGraalContext() }
+    private val contextThreadLocal = ThreadLocal<Context>()
     private val allContexts = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Context, Boolean>())
     private val contextsLock = Any()
+    private const val MAX_CONTEXTS = 50
+
+    /** 获取或创建当前线程的 Context，自动检测 eviction 后的过期 context */
+    private fun getContext(): Context {
+        val existing = contextThreadLocal.get()
+        if (existing != null && allContexts.contains(existing)) {
+            return existing
+        }
+        // context 为 null 或已被 eviction 关闭 → 创建新实例
+        val newCtx = newGraalContext()
+        contextThreadLocal.set(newCtx)
+        return newCtx
+    }
 
     fun compile(script: String): Source? {
         return try {
@@ -90,6 +105,12 @@ object GraalJsUtil {
         synchronized(contextsLock) {
             val ctx = builder.build()
             allContexts.add(ctx)
+            // 超过上限时关闭最早创建的 Context，防止原生内存无限增长
+            while (allContexts.size > MAX_CONTEXTS) {
+                val oldest = allContexts.firstOrNull() ?: break
+                allContexts.remove(oldest)
+                try { oldest.close() } catch (_: Exception) {}
+            }
             return ctx
         }
     }
@@ -121,7 +142,7 @@ object GraalJsUtil {
     private val reentrantDepth = ThreadLocal.withInitial { 0 }
 
     private fun executeScript(scriptOrSource: Any, vars: Map<String, Any?>): Any? {
-        val context = contextThreadLocal.get()
+        val context = getContext()
         val bindings: Value = context.getBindings(GJS_LANG_ID)
 
         val depth = reentrantDepth.get()
@@ -193,7 +214,10 @@ object GraalJsUtil {
 
 }
 
+private val digestThreadLocal = ThreadLocal.withInitial { MessageDigest.getInstance("SHA-256") }
+
 fun String.generateHash(): String {
-    val digest = MessageDigest.getInstance("SHA-256")
+    val digest = digestThreadLocal.get()
+    digest.reset()
     return digest.digest(this.toByteArray()).joinToString("") { "%02x".format(it) }
 }

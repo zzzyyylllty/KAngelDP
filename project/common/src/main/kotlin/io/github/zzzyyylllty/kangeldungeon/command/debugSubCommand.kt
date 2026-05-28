@@ -414,6 +414,8 @@ object DebugCommand {
                 sender.sendStringAsComponent(sender.asLangText("DebugOptionMaxPlayers", template.gameplayGeneral.maxPlayers.toString()))
                 sender.sendStringAsComponent(sender.asLangText("DebugOptionAllowParty", template.gameplayGeneral.allowParty.toString()))
                 sender.sendStringAsComponent(sender.asLangText("DebugOptionLeaveOnDeath", template.gameplayGeneral.leaveOnDeath.toString()))
+                val dc = template.gameplayGeneral.death
+                sender.sendStringAsComponent(sender.asLangText("DebugOptionDeathMode", dc.mode.name, dc.maxRespawns.toString(), dc.autoRespawnDelay.toString(), dc.respawnAtSpawn.toString()))
                 sender.sendStringAsComponent(sender.asLangText("DebugOptionAdventureMode", template.gameplayGeneral.adventureMode.toString()))
                 sender.sendStringAsComponent(sender.asLangText("DebugOptionKeepInventory", template.gameplayGeneral.keepInventory.enabled.toString(), template.gameplayGeneral.keepInventory.requiredLives.toString()))
                 sender.sendStringAsComponent(sender.asLangText("DebugOptionTimer", template.timerConfig.mode.name, template.timerConfig.start.toString()))
@@ -782,35 +784,16 @@ object DebugCommand {
         dynamic("dungeon") {
             execute<CommandSender> { sender, context, argument ->
                 val dungeonName = context["dungeon"]
-                val configs = KAngelDungeon.dungeonKitConfigs
-                if (dungeonName == "*") {
-                    if (configs.isEmpty()) {
-                        sender.sendStringAsComponent(sender.asLangText("DebugNoKitForDungeon", "*"))
-                        return@execute
-                    }
-                    for ((dungeon, map) in configs) {
-                        sender.sendStringAsComponent(sender.asLangText("DebugKitHeader", dungeon, map.size.toString()))
-                        for ((id, kit) in map) {
-                            val mode = if (kit.isChanceMode) sender.asLangText("DebugKitChanceMode") else sender.asLangText("DebugKitWeightMode")
-                            sender.sendStringAsComponent(sender.asLangText("DebugKitEntry", id, kit.rewards.size.toString(), mode, kit.minRewards.toString(), kit.maxRewards.toString()))
-                            if (kit.cooldown > 0) sender.sendStringAsComponent(sender.asLangText("DebugKitCooldown", kit.cooldown.toString()))
-                            if (!kit.conditions.isNullOrEmpty()) sender.sendStringAsComponent(sender.asLangText("DebugKitConditions", kit.conditions.size.toString()))
-                            if (kit.broadcastMessage != null) sender.sendStringAsComponent(sender.asLangText("DebugKitBroadcast", kit.broadcastMessage.take(50)))
-                        }
-                    }
-                } else {
-                    val map = configs[dungeonName]
-                    if (map.isNullOrEmpty()) {
-                        sender.sendStringAsComponent(sender.asLangText("DebugNoKitForDungeon", dungeonName))
-                        return@execute
-                    }
-                    sender.sendStringAsComponent(sender.asLangText("DebugKitHeader", dungeonName, map.size.toString()))
-                    for ((id, kit) in map) {
-                        val mode = if (kit.isChanceMode) sender.asLangText("DebugKitChanceMode") else sender.asLangText("DebugKitWeightMode")
-                        sender.sendStringAsComponent(sender.asLangText("DebugKitEntry", id, kit.rewards.size.toString(), mode, kit.minRewards.toString(), kit.maxRewards.toString()))
-                        if (kit.cooldown > 0) sender.sendStringAsComponent(sender.asLangText("DebugKitCooldown", kit.cooldown.toString()))
-                        if (!kit.conditions.isNullOrEmpty()) sender.sendStringAsComponent(sender.asLangText("DebugKitConditions", kit.conditions.size.toString()))
-                        if (kit.broadcastMessage != null) sender.sendStringAsComponent(sender.asLangText("DebugKitBroadcast", kit.broadcastMessage.take(50)))
+                val globalKits = KAngelDungeon.kitConfigs
+                val dungeonConfigs = KAngelDungeon.dungeonKitConfigs
+
+                fun showKitDetail(id: String, kit: io.github.zzzyyylllty.kangeldungeon.data.KitConfig, showRewards: Boolean = false) {
+                    val mode = if (kit.isChanceMode) sender.asLangText("DebugKitChanceMode") else sender.asLangText("DebugKitWeightMode")
+                    sender.sendStringAsComponent(sender.asLangText("DebugKitEntry", id, kit.rewards.size.toString(), mode, kit.minRewards.toString(), kit.maxRewards.toString()))
+                    if (kit.cooldown > 0) sender.sendStringAsComponent(sender.asLangText("DebugKitCooldown", kit.cooldown.toString()))
+                    if (!kit.conditions.isNullOrEmpty()) sender.sendStringAsComponent(sender.asLangText("DebugKitConditions", kit.conditions.size.toString()))
+                    if (kit.broadcastMessage != null) sender.sendStringAsComponent(sender.asLangText("DebugKitBroadcast", kit.broadcastMessage.take(50)))
+                    if (showRewards) {
                         kit.rewards.forEachIndexed { i, reward ->
                             val chance = reward.chance
                             when (reward.type) {
@@ -836,6 +819,38 @@ object DebugCommand {
                             }
                             if (reward.message != null) sender.sendStringAsComponent(sender.asLangText("DebugKitRewardMessage", reward.message.take(40)))
                         }
+                    }
+                }
+
+                if (dungeonName == "*") {
+                    if (globalKits.isEmpty() && dungeonConfigs.isEmpty()) {
+                        sender.sendStringAsComponent(sender.asLangText("DebugNoKitForDungeon", "*"))
+                        return@execute
+                    }
+                    if (globalKits.isNotEmpty()) {
+                        sender.sendStringAsComponent(sender.asLangText("DebugKitGlobalHeader", globalKits.size.toString()))
+                        for ((id, kit) in globalKits) {
+                            showKitDetail(id, kit, true)
+                        }
+                    }
+                    for ((dungeon, map) in dungeonConfigs) {
+                        sender.sendStringAsComponent(sender.asLangText("DebugKitHeader", dungeon, map.size.toString()))
+                        for ((id, kit) in map) {
+                            showKitDetail(id, kit, true)
+                        }
+                    }
+                } else {
+                    val perDungeon = dungeonConfigs[dungeonName] ?: emptyMap()
+                    val merged = globalKits + perDungeon
+                    if (merged.isEmpty()) {
+                        sender.sendStringAsComponent(sender.asLangText("DebugNoKitForDungeon", dungeonName))
+                        return@execute
+                    }
+                    sender.sendStringAsComponent(sender.asLangText("DebugKitHeader", dungeonName, merged.size.toString()))
+                    for ((id, kit) in merged) {
+                        val source = if (id in perDungeon) sender.asLangText("DebugSourceLocal") else sender.asLangText("DebugSourceGlobal")
+                        sender.sendStringAsComponent(sender.asLangText("DebugKitSource", id, source))
+                        showKitDetail(id, kit, id in perDungeon)
                     }
                 }
             }
