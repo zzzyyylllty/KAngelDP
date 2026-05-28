@@ -18,6 +18,14 @@ debug: false
 # Only enable if you fully trust all dungeon script files. Keep disabled.
 allow-danger-js: false
 
+# 安全模式下允许JS访问的Java类前缀白名单
+# 列表中的包名前缀可以通过 Java.type() 加载
+# Whitelist of Java class prefixes allowed in safe mode
+# Class names starting with these prefixes can be loaded via Java.type()
+allowed-js-classes:
+  - "org.bukkit"
+  - "net.minecraft"
+
 # 语言 language
 lang: en_US
 
@@ -57,6 +65,18 @@ preparation:
 # 清理残余地牢世界（KDP_* 前缀的文件夹）
 # 启用后，服务器启动时会自动删除残留的未正确清理的地牢世界文件夹
 cleanup-residual-worlds: true
+
+# 地牢结束后的自动退出倒计时设置
+auto-exit-delay: 60                   # 结束到自动清理的秒数
+auto-exit-notify-interval: 5          # 倒计时通知间隔（秒）
+auto-exit-countdown-last-seconds: 10  # 最后 N 秒每秒通知
+
+# 地牢结束通知设置（默认内置提示，关掉后只由 agent 脚本控制）
+notify:
+  on-timeout: true                    # 超时时显示默认标题/音效
+  on-all-dead: true                   # 全员阵亡时显示默认标题/音效
+  on-complete: true                   # 通关时显示默认标题
+  on-fail: true                       # 失败时显示默认标题
 
 # 性能设置
 performance:

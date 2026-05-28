@@ -62,6 +62,13 @@ vanilla-options:
   items-drop: true
   items-pickup: true
   spawnpoint: 77 -58 191
+  # Game rules applied on dungeon start / 地牢开始时自动设置的 Minecraft 游戏规则
+  game-rules:
+    doTileDrops: false
+    doDaylightCycle: false
+    doWeatherCycle: false
+    keepInventory: true
+    naturalRegeneration: false
 agent:
   # ============ onCheck / onCheckFail ============
   # Check if the player can start the dungeon / 检查玩家是否能开始地牢

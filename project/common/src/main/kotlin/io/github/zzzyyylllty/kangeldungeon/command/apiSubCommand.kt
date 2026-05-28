@@ -21,7 +21,7 @@ import taboolib.platform.util.asLangText
     description = "api Command of KAngelDungeon.",
     permissionMessage = "",
     permissionDefault = PermissionDefault.OP,
-    newParser = true,
+    newParser = false,
 )
 object ApiCommand {
 
@@ -54,9 +54,9 @@ object ApiCommand {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
                     // 获取参数的值
-                    val content = context["script"].toString()
-                    val ret = runKether(listOf(content), sender)
+                    val content = context["script"]
                     sender.sendStringAsComponent(sender.asLangText("ApiKether", content))
+                    val ret = runKether(listOf(content), sender)
                     sender.sendStringAsComponent(sender.asLangText("ApiReturn", ret.get().toString())) }
             }
         }
@@ -71,8 +71,8 @@ object ApiCommand {
             execute<CommandSender> { sender, context, argument ->
                 submitAsync {
                     val content = context["script"].toString()
-                    val ret = GraalJsUtil.directEval(content, mapOf("player" to sender))
                     sender.sendStringAsComponent(sender.asLangText("ApiJs", content))
+                    val ret = GraalJsUtil.directEval(content, mapOf("player" to sender))
                     sender.sendStringAsComponent(sender.asLangText("ApiReturn", ret.toString())) }
             }
         }
@@ -92,8 +92,8 @@ object ApiCommand {
                         }
                         // 获取参数的值
                         val content = context["script"].toString()
-                        val ret = runKether(listOf(content), bukkitPlayer)
                         sender.sendStringAsComponent(sender.asLangText("ApiKether", content))
+                        val ret = runKether(listOf(content), bukkitPlayer)
                         sender.sendStringAsComponent(sender.asLangText("ApiReturn", ret.get().toString())) }
                 }
             }

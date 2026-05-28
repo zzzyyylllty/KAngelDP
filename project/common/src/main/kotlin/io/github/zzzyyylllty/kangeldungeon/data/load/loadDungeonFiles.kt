@@ -30,6 +30,8 @@ fun loadDungeonFiles() {
         releaseResourceFile("dungeon/sample/obstacle/ironbars.yml")
         releaseResourceFile("dungeon/sample/plan/simpleTimerPlan.yml")
         releaseResourceFile("dungeon/sample/kit/rewards.yml")
+        releaseResourceFile("dungeon/sample/task/sample.yml")
+        releaseResourceFile("dungeon/sample/difficulty.yml")
         // releaseResourceFile 同步释放后文件夹已存在，继续加载
     }
     // 确保 schematics 文件夹存在（用于 WorldEdit .schem 文件）
@@ -102,6 +104,13 @@ fun loadDungeonFile(file: File) {
         return
     }
 
+    // 检测 task/ 子目录下的文件，作为地牢任务配置加载
+    if (file.parentFile.name == "task") {
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonTaskFile(dungeonName, file)
+        return
+    }
+
     // 处理 option.yml — 将其作为单个地牢模板加载，模板名取父目录名
     if (file.name.equals("option.yml", ignoreCase = true)) {
         val map = multiExtensionLoader(file)
@@ -124,6 +133,13 @@ fun loadDungeonFile(file: File) {
     if (file.name.equals("region.yml", ignoreCase = true)) {
         val dungeonName = file.parentFile.name
         loadDungeonRegionFile(dungeonName, file)
+        return
+    }
+
+    // 检测 difficulty.yml — 作为地牢难度配置加载
+    if (file.name.equals("difficulty.yml", ignoreCase = true)) {
+        val dungeonName = file.parentFile.name
+        loadDungeonDifficultyFile(dungeonName, file)
         return
     }
 
@@ -237,6 +253,15 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     val spawnpointStr = vanillaSection["spawnpoint"] as? String
     val spawnpointVector = parseSpawnpointString(spawnpointStr)
 
+    // ===== 解析 game-rules（游戏规则） =====
+    val gameRules: Map<String, Any> = (vanillaSection["game-rules"] as? Map<String, Any?>)?.mapValues { (_, v) ->
+        when (v) {
+            is Boolean -> v
+            is Number -> v.toInt()
+            else -> v.toString()
+        }
+    } ?: emptyMap()
+
     // ===== 解析 agent（代理脚本） =====
     val agentSection = arg["agent"] as? Map<String, Any?> ?: emptyMap()
     val agentMap = LinkedHashMap<String, Agent>()
@@ -293,6 +318,7 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
             itemsPickup = itemsPickup,
             spawnpoint = spawnpointVector
         ),
+        gameRules = gameRules,
         metaConfig = metaConfig
     )
 
@@ -546,4 +572,134 @@ fun parseInteractConfig(id: String, data: Map<String, Any?>): InteractConfig? {
         devLog("Failed to parse interact config '$id': ${e.message}")
         return null
     }
+}
+
+/**
+ * 加载地牢任务配置文件（位于 dungeon/<dungeon-id>/task/ 目录下）
+ * YAML 格式：
+ *   taskId:
+ *     trigger: MOB_KILL
+ *     filters:
+ *       mob_type: ZOMBIE
+ *     maxExecutions: 10
+ *     cooldown: 100
+ *     agent:
+ *       onTrigger: |-
+ *         instance.sendMessageToAllPlayers("Task triggered!");
+ */
+fun loadDungeonTaskFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.task"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val dungeonMap = KAngelDungeon.dungeonTaskConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+    for (entry in map.entries) {
+        val key = entry.key
+        val value = entry.value as? Map<String, Any?> ?: continue
+        val taskConfig = parseTaskConfig(key, value)
+        if (taskConfig != null) {
+            dungeonMap[key] = taskConfig
+            devLog("Loaded dungeon task: $dungeonName/$key")
+        }
+    }
+}
+
+/**
+ * 解析任务配置
+ */
+fun parseTaskConfig(id: String, data: Map<String, Any?>): TaskConfig? {
+    try {
+        val trigger = data["trigger"] as? String ?: return null
+        val filtersRaw = data["filters"] as? Map<String, Any?>
+        val filters = filtersRaw?.mapValues { (_, v) -> v.toString() } ?: emptyMap()
+        val maxExecutions = (data["maxExecutions"] as? Number)?.toInt() ?: -1
+        val cooldown = (data["cooldown"] as? Number)?.toLong() ?: 0L
+        val agentRaw = data["agent"] as? Map<String, Any?>
+        val agent = if (agentRaw != null) {
+            TaskAgent(onTrigger = agentRaw["onTrigger"] as? String)
+        } else null
+        return TaskConfig(
+            id = id,
+            trigger = trigger,
+            filters = filters,
+            maxExecutions = maxExecutions,
+            cooldown = cooldown,
+            agent = agent
+        )
+    } catch (e: Exception) {
+        devLog("Failed to parse task config '$id': ${e.message}")
+        return null
+    }
+}
+
+/**
+ * 加载地牢难度配置文件（位于 dungeon/<dungeon-id>/difficulty.yml）
+ * YAML 格式：
+ *   difficulties:
+ *     easy:
+ *       display: "Easy"
+ *       description: "For beginners"
+ *       meta:
+ *         global:
+ *           health_multiplier: 0.8
+ *       agents:
+ *         onStart: |-
+ *           instance.sendMessageToAllPlayers("Easy mode!");
+ *     normal: ...
+ *     hard: ...
+ */
+fun loadDungeonDifficultyFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.difficulty"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val difficultiesSection = map["difficulties"] as? Map<String, Any?> ?: return
+    val dungeonMap = KAngelDungeon.dungeonDifficultyConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+
+    for (entry in difficultiesSection.entries) {
+        val diffId = entry.key
+        val data = entry.value as? Map<String, Any?> ?: continue
+
+        val display = data["display"] as? String ?: diffId
+        val description = data["description"] as? String ?: ""
+        val metaSection = data["meta"] as? Map<String, Any?> ?: emptyMap()
+        val agentsSection = data["agents"] as? Map<String, Any?> ?: emptyMap()
+
+        // 合并 meta（global + player）
+        val mergedMeta = mutableMapOf<String, Any?>()
+        val globalMeta = metaSection["global"] as? Map<String, Any?> ?: emptyMap()
+        val playerMeta = metaSection["player"] as? Map<String, Any?> ?: emptyMap()
+        mergedMeta["global"] = globalMeta
+        mergedMeta["player"] = playerMeta
+
+        // 收集代理脚本
+        val agents = mutableMapOf<String, String>()
+        for ((trigger, script) in agentsSection) {
+            if (script is String && script.isNotBlank()) {
+                agents[trigger] = script
+            }
+        }
+
+        val config = DifficultyConfig(
+            id = diffId,
+            display = display,
+            description = description,
+            meta = mergedMeta,
+            agents = agents
+        )
+        dungeonMap[diffId] = config
+        devLog("Loaded dungeon difficulty: $dungeonName/$diffId")
+    }
+}
+
+/**
+ * 获取难度起始 meta 合并后的 Map（用于创建地牢时初始化 meta）
+ */
+fun getDifficultyGlobalMeta(dungeonName: String, difficultyId: String?): Map<String, Any?> {
+    if (difficultyId == null) return emptyMap()
+    val diffConfig = KAngelDungeon.dungeonDifficultyConfigs[dungeonName]?.get(difficultyId) ?: return emptyMap()
+    @Suppress("UNCHECKED_CAST")
+    return (diffConfig.meta["global"] as? Map<String, Any?>) ?: emptyMap()
 }

@@ -103,7 +103,7 @@ import taboolib.platform.util.asLangText
     description = "Main Command of KAngelDungeon.",
     permissionMessage = "",
     permissionDefault = PermissionDefault.OP,
-    newParser = true,
+    newParser = false,
 )
 object KAngelDungeonMainCommand {
 

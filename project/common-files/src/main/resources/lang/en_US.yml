@@ -78,8 +78,10 @@ WarningMonsterUnknownEntity: "Unknown entity type: {0}"
 WarningMonsterMythicMobsSpawnFailed: "MythicMobs {0} spawn failed: {1}"
 WarningMonsterAgentFailed: "Monster {0} agent script execution failed: {1}"
 WarningPlanExecutionFailed: "Plan {0} execution failed in dungeon {1}: {2}"
+WarningTaskExecutionFailed: "Task {0} execution failed in dungeon {1}: {2}"
 WarningWorldAlreadyLoaded: "World {0} is already loaded, unloading before creating new instance"
 WarningAgentExecutionFailed: "Agent script {0} execution failed in dungeon {1}: {2}"
+WarningDifficultyAgentFailed: "Difficulty agent script {0} failed in dungeon {1}({2}): {3}"
 WarningDeleteDirectoryFailed: "Failed to delete directory: {0}, file may be in use"
 DungeonActiveReloadConfigWarn: "<yellow>Active dungeon instances detected, config reload will skip cleanup to avoid affecting running instances</yellow>"
 
@@ -127,6 +129,10 @@ KitRewardMissingSource: "<red>Kit reward missing 'source' for player {0}</red>"
 KitRewardMissingItem: "<red>Kit reward missing 'item' for player {0}</red>"
 KitNotFound: "<red>Kit '{0}' not found.</red>"
 KitLoadFailed: "<red>Failed to load kit '{0}': {1}</red>"
+KitCooldownActive: "<red>You must wait {0}s before opening this kit again.</red>"
+KitConditionFailed: "<red>You do not meet the requirements to open this kit.</red>"
+KitOpenSuccess: "<gold>You opened <yellow>{0}</yellow> and received <yellow>{1}</yellow> reward(s)!</gold>"
+KitBroadcast: "<yellow>{0}</yellow> <gold>opened <yellow>{1}</yellow>!</gold>"
 
 # === External Item ===
 ExternalItemHookSuccess: "Hooked External item source: {0}"
@@ -188,8 +194,19 @@ DungeonStateFailed: "<red>Failed</red>"
 DungeonStateOverdue: "<red>Overdue</red>"
 
 # === Dungeon Tick Messages ===
+DungeonTimeoutTitle: "<red><bold>⏰ DUNGEON TIMEOUT!</bold></red>"
+DungeonTimeoutSubtitle: "<gray>Auto-exit in {0}s...</gray>"
+DungeonAllDeadTitle: "<red><bold>☠ ALL PLAYERS DOWN!</bold></red>"
+DungeonAllDeadSubtitle: "<gray>Auto-exit in {0}s...</gray>"
 DungeonTimeout: "<red>Dungeon timed out!</red>"
 DungeonAllDead: "<red>All players have died. Dungeon failed!</red>"
+
+# === Dungeon End State ===
+DungeonCompletedTitle: "<gradient:green:gold><bold>✦ DUNGEON COMPLETE ✦</bold></gradient>"
+DungeonCompletedSubtitle: "<gray>Congratulations!</gray>"
+DungeonFailedTitle: "<red><bold>✘ DUNGEON FAILED</bold></red>"
+DungeonFailedSubtitle: "<gray>Better luck next time!</gray>"
+DungeonEndAutoExit: "<red>⏳ <bold>{0}s</bold> until auto-exit...</red>"
 
 # === Dungeon Preparation Notifications ===
 PrepNotifyCountdown: "<gold>⚔ Preparation</gold> <gray>Starting in <green>{0}s</green></gray>"
@@ -343,6 +360,9 @@ DungeonCannotComplete: "<yellow>Dungeon {0} cannot be completed. Check its state
 DungeonPlayerNotInDungeon: "<yellow>That player is not in any dungeon.</yellow>"
 DungeonKickSuccess: "<green>Kicked {0} from dungeon {1}.</green>"
 DungeonKickFailed: "<yellow>Cannot kick that player.</yellow>"
+DungeonForceLeft: "<green>Force-left dungeon {0}!</green>"
+DungeonForceKickSuccess: "<green>Force-kicked {0} from dungeon {1}.</green>"
+DungeonNoPermissionForceLeave: "<red>You don't have permission to force-leave the dungeon.</red>"
 DungeonAddPlayerNoPerm: "<red>Target player {0} does not have permission {1}!</red>"
 DungeonAddPlayerSuccess: "<green>Added {0} to dungeon {1}.</green>"
 DungeonAddPlayerFailed: "<yellow>Cannot add player to dungeon.</yellow>"
@@ -516,6 +536,11 @@ DebugKitRewardItem: "   <gray>{0}. [{1}] {2} x{3} (weight: {4})</gray>"
 DebugKitRewardCommand: "   <gray>{0}. [Command] {1} (weight: {2})</gray>"
 DebugKitRewardScript: "   <gray>{0}. [Script] (weight: {1})</gray>"
 DebugKitRewardAgent: "   <gray>{0}. [Agent] {1} (weight: {2})</gray>"
+DebugKitCooldown: "   <gray>Cooldown: {0}s</gray>"
+DebugKitConditions: "   <gray>Conditions: {0}</gray>"
+DebugKitBroadcast: "   <gray>Broadcast: <reset>{0}</reset></gray>"
+DebugKitRewardChance: "   <gray>{0}. [{1}] {2} x{3} (chance: {4}%)</gray>"
+DebugKitRewardMessage: "     <gray>Msg: <reset>{0}</reset></gray>"
 DebugNoKitForDungeon: "<yellow>Dungeon [{0}] has no kit configs.</yellow>"
 
 # === Debug: Active Plans ===

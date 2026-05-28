@@ -1,6 +1,7 @@
 package io.github.zzzyyylllty.kangeldungeon.event
 
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonInstance
+import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import taboolib.platform.type.BukkitProxyEvent
 
@@ -34,3 +35,31 @@ class DungeonPlayerDeathEvent(val instance: DungeonInstance, val player: Player,
 
 /** 地牢准备倒计时每秒触发一次 */
 class DungeonTickEvent(val instance: DungeonInstance, override val allowCancelled: Boolean = false) : BukkitProxyEvent()
+
+// ====== Chemdah 任务系统用的事件（每个玩家独立触发） ======
+
+/** 玩家在地牢中击杀怪物时触发，不可取消 */
+class DungeonMobKillEvent(
+    val instance: DungeonInstance,
+    val player: Player,
+    val mobType: String,
+    val mobName: String,
+    val mobId: String,
+    val level: Int,
+    val entity: LivingEntity,
+    override val allowCancelled: Boolean = false
+) : BukkitProxyEvent()
+
+/** 玩家通关地牢时触发，不可取消 */
+class DungeonPlayerCompleteEvent(
+    val instance: DungeonInstance,
+    val player: Player,
+    override val allowCancelled: Boolean = false
+) : BukkitProxyEvent()
+
+/** 玩家失败地牢时触发，不可取消 */
+class DungeonPlayerFailEvent(
+    val instance: DungeonInstance,
+    val player: Player,
+    override val allowCancelled: Boolean = false
+) : BukkitProxyEvent()

@@ -7,9 +7,6 @@ import org.graalvm.polyglot.Engine
 import org.graalvm.polyglot.HostAccess
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.Value
-import taboolib.common.LifeCycle
-import taboolib.common.env.RuntimeEnv
-import taboolib.common.platform.Awake
 import java.security.MessageDigest
 import javax.script.*
 import kotlin.String
@@ -71,6 +68,7 @@ object GraalJsUtil {
 
     fun newGraalContext(): Context {
         val dangerMode = io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.config.getBoolean("allow-danger-js", false)
+        val allowedPrefixes = io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.config.getStringList("allowed-js-classes")
 
         val builder = Context.newBuilder(GJS_LANG_ID)
             .engine(globalGJSEngine)
@@ -81,10 +79,12 @@ object GraalJsUtil {
                 .allowHostAccess(HostAccess.ALL)
                 .allowHostClassLookup { true }
         } else {
-            // 安全模式：只能调用通过 bindings 传入的对象的方法，不能通过 Java.type() 加载新类
+            // 安全模式：仅允许白名单包名中的类通过 Java.type() 加载
             builder.allowAllAccess(false)
                 .allowHostAccess(HostAccess.ALL)
-                .allowHostClassLookup { false }
+                .allowHostClassLookup { className ->
+                    allowedPrefixes.any { prefix -> className.startsWith(prefix) }
+                }
         }
 
         synchronized(contextsLock) {
@@ -189,17 +189,6 @@ object GraalJsUtil {
 
     private fun createScriptSource(script: String, cached: Boolean = true): Source {
         return Source.newBuilder(GJS_LANG_ID, script, "<eval>").cached(cached).build()
-    }
-
-    @Awake(LifeCycle.INIT)
-    private fun initialize() {
-        loadDependencies("graaljs")
-    }
-
-    internal fun loadDependencies(name: String) {
-        RuntimeEnv.ENV_DEPENDENCY.loadFromLocalFile(
-            this::class.java.classLoader.getResource("META-INF/dependencies/$name.json")
-        )
     }
 
 }

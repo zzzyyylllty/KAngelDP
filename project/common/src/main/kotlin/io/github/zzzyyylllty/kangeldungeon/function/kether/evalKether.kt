@@ -22,12 +22,14 @@ import kotlin.String
  * From [TabooLib DOC](https://taboolib.feishu.cn/wiki/RYDWwwT4ZiOpsakCEyRcXWOjnu1)
  * */
 
-fun runKether(script: List<String>, sender: CommandSender): CompletableFuture<Any> {
+fun runKether(script: List<String>, sender: CommandSender): CompletableFuture<Any?> {
     return KetherShell.eval(
-        script, options = ScriptOptions(
-            sender = adaptCommandSender(sender)
-        )
-    ).thenApply { it }
+        source = script,
+        options = ScriptOptions.builder()
+            .namespace(listOf("kether"))
+            .sender(sender)
+            .build()
+    )
 }
 
 fun ScriptFrame.getBukkitPlayer(name: ParsedAction<*>? = null): Player {

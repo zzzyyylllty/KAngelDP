@@ -35,7 +35,7 @@ private fun CommandSender.stateLabel(state: DungeonState): String = when (state)
     description = "DEBUG Command of KAngelDungeon.",
     permissionMessage = "",
     permissionDefault = PermissionDefault.OP,
-    newParser = true,
+    newParser = false,
 )
 object DebugCommand {
 
@@ -793,6 +793,9 @@ object DebugCommand {
                         for ((id, kit) in map) {
                             val mode = if (kit.isChanceMode) sender.asLangText("DebugKitChanceMode") else sender.asLangText("DebugKitWeightMode")
                             sender.sendStringAsComponent(sender.asLangText("DebugKitEntry", id, kit.rewards.size.toString(), mode, kit.minRewards.toString(), kit.maxRewards.toString()))
+                            if (kit.cooldown > 0) sender.sendStringAsComponent(sender.asLangText("DebugKitCooldown", kit.cooldown.toString()))
+                            if (!kit.conditions.isNullOrEmpty()) sender.sendStringAsComponent(sender.asLangText("DebugKitConditions", kit.conditions.size.toString()))
+                            if (kit.broadcastMessage != null) sender.sendStringAsComponent(sender.asLangText("DebugKitBroadcast", kit.broadcastMessage.take(50)))
                         }
                     }
                 } else {
@@ -805,12 +808,19 @@ object DebugCommand {
                     for ((id, kit) in map) {
                         val mode = if (kit.isChanceMode) sender.asLangText("DebugKitChanceMode") else sender.asLangText("DebugKitWeightMode")
                         sender.sendStringAsComponent(sender.asLangText("DebugKitEntry", id, kit.rewards.size.toString(), mode, kit.minRewards.toString(), kit.maxRewards.toString()))
+                        if (kit.cooldown > 0) sender.sendStringAsComponent(sender.asLangText("DebugKitCooldown", kit.cooldown.toString()))
+                        if (!kit.conditions.isNullOrEmpty()) sender.sendStringAsComponent(sender.asLangText("DebugKitConditions", kit.conditions.size.toString()))
+                        if (kit.broadcastMessage != null) sender.sendStringAsComponent(sender.asLangText("DebugKitBroadcast", kit.broadcastMessage.take(50)))
                         kit.rewards.forEachIndexed { i, reward ->
+                            val chance = reward.chance
                             when (reward.type) {
                                 io.github.zzzyyylllty.kangeldungeon.data.RewardType.ITEM -> {
                                     val src = reward.source ?: "?"
                                     val itemName = reward.item ?: "?"
-                                    sender.sendStringAsComponent(sender.asLangText("DebugKitRewardItem", (i + 1).toString(), src, itemName, reward.amount.toString(), reward.weight.toString()))
+                                    if (chance != null)
+                                        sender.sendStringAsComponent(sender.asLangText("DebugKitRewardChance", (i + 1).toString(), src, itemName, reward.amount.toString(), chance.toString()))
+                                    else
+                                        sender.sendStringAsComponent(sender.asLangText("DebugKitRewardItem", (i + 1).toString(), src, itemName, reward.amount.toString(), reward.weight.toString()))
                                 }
                                 io.github.zzzyyylllty.kangeldungeon.data.RewardType.COMMAND -> {
                                     val cmd = reward.command?.take(40) ?: "?"
@@ -824,6 +834,7 @@ object DebugCommand {
                                     sender.sendStringAsComponent(sender.asLangText("DebugKitRewardAgent", (i + 1).toString(), trigger, reward.weight.toString()))
                                 }
                             }
+                            if (reward.message != null) sender.sendStringAsComponent(sender.asLangText("DebugKitRewardMessage", reward.message.take(40)))
                         }
                     }
                 }

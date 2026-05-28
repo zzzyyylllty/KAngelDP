@@ -21,13 +21,14 @@ import taboolib.platform.util.asLangText
     description = "DATA Command of KAngelDungeon.",
     permissionMessage = "",
     permissionDefault = PermissionDefault.OP,
-    newParser = true,
+    newParser = false,
 )
 object DataCommand {
 
     @CommandBody
     val main = mainCommand {
         createModernHelper()
+
     }
 
     @CommandBody

@@ -81,8 +81,10 @@ WarningMonsterUnknownEntity: "未知的生物类型: {0}"
 WarningMonsterMythicMobsSpawnFailed: "MythicMobs 生物 {0} 生成失败: {1}"
 WarningMonsterAgentFailed: "怪物 {0} 代理脚本执行失败: {1}"
 WarningPlanExecutionFailed: "计划 {0} 在地牢 {1} 中执行失败: {2}"
+WarningTaskExecutionFailed: "任务 {0} 在地牢 {1} 中执行失败: {2}"
 WarningWorldAlreadyLoaded: "世界 {0} 已加载，正在卸载后重新创建地牢实例"
 WarningAgentExecutionFailed: "代理脚本 {0} 在地牢 {1} 中执行失败: {2}"
+WarningDifficultyAgentFailed: "难度代理脚本 {0} 在地牢 {1}(难度:{2}) 中执行失败: {3}"
 WarningDeleteDirectoryFailed: "删除目录失败: {0}，文件可能被占用"
 DungeonActiveReloadConfigWarn: "<yellow>有活跃地牢实例正在进行，配置重载将跳过清理（避免影响运行中的实例）</yellow>"
 
@@ -129,6 +131,11 @@ KitRewardExecutionFailed: "<red>执行Kit奖励失败 ({0}) 玩家 {1}: {2}</red
 KitRewardMissingSource: "<red>Kit奖励缺少 'source'，玩家 {0}</red>"
 KitRewardMissingItem: "<red>Kit奖励缺少 'item'，玩家 {0}</red>"
 KitNotFound: "<red>Kit '{0}' 不存在。</red>"
+KitLoadFailed: "<red>加载Kit '{0}' 失败: {1}</red>"
+KitCooldownActive: "<red>你需要等待 {0} 秒才能再次打开此礼包。</red>"
+KitConditionFailed: "<red>你不满足打开此礼包的条件。</red>"
+KitOpenSuccess: "<gold>你打开了 <yellow>{0}</yellow> 并获得了 <yellow>{1}</yellow> 个奖励！</gold>"
+KitBroadcast: "<yellow>{0}</yellow> <gold>打开了 <yellow>{1}</yellow>！</gold>"
 
 # === 外部物品 ===
 ExternalItemHookSuccess: "已挂钩外部物品源: {0}"
@@ -185,8 +192,19 @@ DungeonStateFailed: "<red>已失败</red>"
 DungeonStateOverdue: "<red>已超时</red>"
 
 # === 地牢Tick消息 ===
+DungeonTimeoutTitle: "<red><bold>⏰ 地牢超时！</bold></red>"
+DungeonTimeoutSubtitle: "<gray>{0}秒后自动退出...</gray>"
+DungeonAllDeadTitle: "<red><bold>☠ 全员阵亡！</bold></red>"
+DungeonAllDeadSubtitle: "<gray>{0}秒后自动退出...</gray>"
 DungeonTimeout: "<red>地牢超时！</red>"
 DungeonAllDead: "<red>全员阵亡，地牢失败！</red>"
+
+# === 地牢结束状态 ===
+DungeonCompletedTitle: "<gradient:green:gold><bold>✦ 地牢通关 ✦</bold></gradient>"
+DungeonCompletedSubtitle: "<gray>恭喜完成地牢！</gray>"
+DungeonFailedTitle: "<red><bold>✘ 地牢失败</bold></red>"
+DungeonFailedSubtitle: "<gray>再接再厉！</gray>"
+DungeonEndAutoExit: "<red>⏳ <bold>{0}秒</bold>后自动退出...</red>"
 
 # === 主命令 (/kd) ===
 MainAbout: "<gradient:aqua:blue>KAngelDungeon</gradient> <#ccccff>{0}"
@@ -333,6 +351,9 @@ DungeonCannotComplete: "<yellow>地牢 {0} 无法完成，请检查状态</yello
 DungeonPlayerNotInDungeon: "<yellow>该玩家不在任何地牢中</yellow>"
 DungeonKickSuccess: "<green>已将 {0} 从地牢 {1} 踢出</green>"
 DungeonKickFailed: "<yellow>无法踢出该玩家</yellow>"
+DungeonForceLeft: "<green>已强制离开地牢 {0}!</green>"
+DungeonForceKickSuccess: "<green>已将 {0} 从地牢 {1} 强制踢出</green>"
+DungeonNoPermissionForceLeave: "<red>你没有权限强制离开地牢</red>"
 DungeonAddPlayerNoPerm: "<red>目标玩家 {0} 没有权限 {1}!</red>"
 DungeonAddPlayerSuccess: "<green>已将 {0} 添加到地牢 {1}</green>"
 DungeonAddPlayerFailed: "<yellow>无法添加玩家到地牢</yellow>"
@@ -506,6 +527,11 @@ DebugKitRewardItem: "   <gray>{0}. [{1}] {2} x{3} (权重: {4})</gray>"
 DebugKitRewardCommand: "   <gray>{0}. [命令] {1} (权重: {2})</gray>"
 DebugKitRewardScript: "   <gray>{0}. [脚本] (权重: {1})</gray>"
 DebugKitRewardAgent: "   <gray>{0}. [代理] {1} (权重: {2})</gray>"
+DebugKitCooldown: "   <gray>冷却: {0}秒</gray>"
+DebugKitConditions: "   <gray>条件: {0}</gray>"
+DebugKitBroadcast: "   <gray>广播: <reset>{0}</reset></gray>"
+DebugKitRewardChance: "   <gray>{0}. [{1}] {2} x{3} (概率: {4}%)</gray>"
+DebugKitRewardMessage: "     <gray>消息: <reset>{0}</reset></gray>"
 DebugNoKitForDungeon: "<yellow>地牢 [{0}] 没有Kit配置</yellow>"
 
 # === Debug: 活跃计划 ===

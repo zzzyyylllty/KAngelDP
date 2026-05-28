@@ -14,6 +14,7 @@ import io.github.zzzyyylllty.kangeldungeon.util.devLog
 import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper.getWorldName
 import io.github.zzzyyylllty.kangeldungeon.util.monster.MonsterManager
 import io.github.zzzyyylllty.kangeldungeon.util.obstacle.ObstacleManager
+import io.github.zzzyyylllty.kangeldungeon.util.task.TaskManager
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.World
@@ -438,6 +439,9 @@ object DungeonHelper {
         // 清理怪物追踪数据
         MonsterManager.clearWorld(worldName)
 
+        // 清理任务追踪数据
+        TaskManager.clearInstance(dungeonInstance)
+
         // 删除世界文件夹（确保文件夹删除后再从活跃实例中移除，防止插件重载时文件夹残留）
         val deleteTask = {
             try {
@@ -511,14 +515,15 @@ object DungeonHelper {
         players: Collection<Player>,
         leader: Player,
         meta: Map<String, Any>,
-        onWorldReady: ((UUID) -> Unit)? = null
+        onWorldReady: ((UUID) -> Unit)? = null,
+        difficultyId: String? = null
     ): UUID? {
         val uuid = UUID.randomUUID()
         val template = KAngelDungeon.dungeonTemplates[templateName] ?: run {
             severeL("ErrorTemplateNotExist", templateName)
             return null
         }
-        devLog("Create dungeon $templateName")
+        devLog("Create dungeon $templateName" + if (difficultyId != null) " (difficulty: $difficultyId)" else "")
 
         // 缓存所有玩家进入地牢前的位置
         players.forEach { player ->
@@ -529,7 +534,7 @@ object DungeonHelper {
         val createWorldAndInstance: () -> Unit = {
             val world = createDungeonWorld(template, uuid)
             if (world != null) {
-                completeDungeonCreation(template, uuid, world, players, leader, meta, onWorldReady)
+                completeDungeonCreation(template, uuid, world, players, leader, meta, onWorldReady, difficultyId)
             } else {
                 devLog("Dungeon world creation is null, skipped")
                 players.forEach { playerPreviousLocations.remove(it.uniqueId) }
@@ -555,12 +560,21 @@ object DungeonHelper {
         players: Collection<Player>,
         leader: Player,
         meta: Map<String, Any>,
-        onWorldReady: ((UUID) -> Unit)?
+        onWorldReady: ((UUID) -> Unit)?,
+        difficultyId: String? = null
     ) {
         val worldName = DungeonHelper.getWorldName(template.name, uuid)
         val finalMeta = meta.toMutableMap()
         finalMeta["name"] = template.name
         finalMeta["template"] = template
+
+        // 合并难度起始 meta
+        if (difficultyId != null) {
+            val diffMeta = io.github.zzzyyylllty.kangeldungeon.data.load.getDifficultyGlobalMeta(template.name, difficultyId)
+            finalMeta.putAll(diffMeta)
+            finalMeta["difficulty"] = difficultyId
+        }
+
         val dungeonMeta = DungeonMeta(ConcurrentHashMap(finalMeta))
 
         val playerUUIDs = ConcurrentHashMap.newKeySet<UUID>()
@@ -577,7 +591,8 @@ object DungeonHelper {
             state = DungeonState.PREPARING,
             meta = dungeonMeta,
             spawnLocation = template.effectiveSpawnpoint.toLocation(world),
-            worldReady = !isSchematicMode
+            worldReady = !isSchematicMode,
+            difficultyId = difficultyId
         )
         KAngelDungeon.dungeonInstances[uuid] = instance
         KAngelDungeon.worldInstanceIndex[worldName] = uuid

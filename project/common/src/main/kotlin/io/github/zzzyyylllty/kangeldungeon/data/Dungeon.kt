@@ -11,7 +11,9 @@ import io.github.zzzyyylllty.kangeldungeon.util.obstacle.ObstacleManager
 import io.github.zzzyyylllty.kangeldungeon.util.plan.PlanManager
 import io.github.zzzyyylllty.kangeldungeon.util.region.RegionManager
 import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper
+import io.github.zzzyyylllty.kangeldungeon.util.task.TaskManager
 import io.github.zzzyyylllty.kangeldungeon.data.defaultData
+import io.github.zzzyyylllty.kangeldungeon.function.kether.evalKetherBoolean
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.title.Title
@@ -92,6 +94,9 @@ data class DungeonTemplate(
     // 原版游戏选项
     val vanillaOptions: VanillaOptions = VanillaOptions(),
 
+    // 游戏规则（启动时自动设置，如 doTileDrops, doDaylightCycle 等）
+    val gameRules: Map<String, Any> = emptyMap(),
+
     // 地牢元数据模板
     val metaConfig: MetaConfig = MetaConfig(),
 
@@ -169,7 +174,14 @@ class DungeonInstance(
 
     // 准备阶段通知追踪：上次通知时剩余的秒数，避免每秒重复发送
     @Volatile
-    var lastPrepNotifyRemaining: Int = -1
+    var lastPrepNotifyRemaining: Int = -1,
+
+    // 结束阶段倒计时追踪：上次通知时剩余的秒数
+    @Volatile
+    var lastEndCountdownRemaining: Int = -1,
+
+    // 选择的难度 ID（null 表示默认/无难度）
+    val difficultyId: String? = null
 ) {
 
     /**
@@ -231,6 +243,11 @@ class DungeonInstance(
             // 7. 触发 Post 事件 (不可取消)
             DungeonPlayerJoinPostEvent(this, player).call()
             meta.add("player.join", 1)
+            // 触发 PLAYER_JOIN 任务
+            TaskManager.triggerTasks(this, "PLAYER_JOIN", mapOf(
+                "playerName" to player.name,
+                "player" to player
+            ))
         }
 
         return added
@@ -249,13 +266,27 @@ class DungeonInstance(
             getTemplate()?.runAgent("onLeaveFail", mapOf("instance" to this, "player" to player), player)
             return false
         }
+        return removePlayerInternal(player)
+    }
 
-        // 2. 触发 Pre 事件 (可取消，例如：战斗状态下不允许退出)
+    /**
+     * 强制移除玩家（跳过 onLeave 条件检查，但仍触发 PreEvent）
+     * JS: instance.forceRemovePlayer(player)
+     */
+    fun forceRemovePlayer(player: Player): Boolean {
+        return removePlayerInternal(player)
+    }
+
+    /**
+     * 移除玩家的内部实现（跳过 onLeave，但执行 PreEvent → 移除 → PostEvent）
+     */
+    private fun removePlayerInternal(player: Player): Boolean {
+        // 1. 触发 Pre 事件 (可取消，例如：战斗状态下不允许退出)
         val event = DungeonPlayerQuitPreEvent(this, player)
         event.call()
         if (event.isCancelled) return false
 
-        // 3. 执行核心逻辑
+        // 2. 执行核心逻辑
         val removed = players.remove(player.uniqueId)
 
         if (removed) {
@@ -273,6 +304,11 @@ class DungeonInstance(
             // 5. 触发 Post 事件 (不可取消)
             DungeonPlayerQuitPostEvent(this, player).call()
             meta.add("player.leave", 1)
+            // 触发 PLAYER_LEAVE 任务
+            TaskManager.triggerTasks(this, "PLAYER_LEAVE", mapOf(
+                "playerName" to player.name,
+                "player" to player
+            ))
         }
 
         return removed
@@ -332,10 +368,20 @@ class DungeonInstance(
             if (template.gameplayGeneral.adventureMode) {
                 setAllPlayersGameMode("adventure")
             }
+            // 应用游戏规则（如 doTileDrops, doDaylightCycle 等）
+            for ((rule, value) in template.gameRules) {
+                setGameRule(rule, value.toString())
+            }
         }
 
         // 6. 执行 onStart 代理脚本
         runAgentSafe("onStart", mapOf("instance" to this, "template" to getTemplate()), null)
+
+        // 6b. 执行难度 onStart 代理脚本
+        runDifficultyAgent("onStart", mapOf("instance" to this, "template" to getTemplate()))
+
+        // 触发 DUNGEON_START 任务
+        TaskManager.triggerTasks(this, "DUNGEON_START")
 
         // 7. 停止准备阶段计划，启动 BEGIN 触发器计划
         stopAllPlans()
@@ -378,6 +424,12 @@ class DungeonInstance(
         // 3. 执行 onComplete 代理脚本
         runAgentSafe("onComplete", mapOf("instance" to this, "template" to getTemplate()), null)
 
+        // 3b. 执行难度 onComplete 代理脚本
+        runDifficultyAgent("onComplete", mapOf("instance" to this, "template" to getTemplate()))
+
+        // 触发 DUNGEON_COMPLETE 任务
+        TaskManager.triggerTasks(this, "DUNGEON_COMPLETE")
+
         // 4. 停止所有进行中的计划，并启动 END 触发器计划
         stopAllPlans()
         startPlansForTrigger("END")
@@ -385,6 +437,14 @@ class DungeonInstance(
         // 5. 触发 Post 事件 (不可取消)
         DungeonCompletePostEvent(this).call()
         meta.add("dungeon.complete", 1)
+
+        // 6. 为每个在线玩家触发单人完成事件（供 Chemdah 任务系统使用）
+        for (uuid in players) {
+            val player = Bukkit.getPlayer(uuid)
+            if (player != null && player.isOnline) {
+                try { DungeonPlayerCompleteEvent(this, player).call() } catch (_: Exception) { }
+            }
+        }
         return true
     }
 
@@ -412,6 +472,12 @@ class DungeonInstance(
         // 3. 执行 onFail 代理脚本
         runAgentSafe("onFail", mapOf("instance" to this, "template" to getTemplate()), null)
 
+        // 3b. 执行难度 onFail 代理脚本
+        runDifficultyAgent("onFail", mapOf("instance" to this, "template" to getTemplate()))
+
+        // 触发 DUNGEON_FAIL 任务
+        TaskManager.triggerTasks(this, "DUNGEON_FAIL")
+
         // 4. 停止所有进行中的计划，并启动 FAIL 触发器计划
         stopAllPlans()
         startPlansForTrigger("FAIL")
@@ -419,6 +485,14 @@ class DungeonInstance(
         // 5. 触发 Post 事件 (不可取消)
         DungeonFailPostEvent(this).call()
         meta.add("dungeon.fail", 1)
+
+        // 6. 为每个在线玩家触发单人失败事件（供 Chemdah 任务系统使用）
+        for (uuid in players) {
+            val player = Bukkit.getPlayer(uuid)
+            if (player != null && player.isOnline) {
+                try { DungeonPlayerFailEvent(this, player).call() } catch (_: Exception) { }
+            }
+        }
         return true
     }
 
@@ -430,6 +504,26 @@ class DungeonInstance(
             getTemplate()?.runAgent(trigger, extraVariables, player)
         } catch (e: Exception) {
             warningL("WarningAgentExecutionFailed", trigger, templateName, e.message ?: "Unknown error")
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * 执行当前难度对应的代理脚本（与 option.yml agent 独立）
+     */
+    private fun runDifficultyAgent(trigger: String, extraVariables: Map<String, Any?> = emptyMap()) {
+        val diffId = difficultyId ?: return
+        val diffConfig = KAngelDungeon.dungeonDifficultyConfigs[templateName]?.get(diffId) ?: return
+        val script = diffConfig.agents[trigger] ?: return
+        try {
+            val data = defaultData + mapOf(
+                "instance" to this,
+                "template" to getTemplate(),
+                "difficulty" to diffConfig
+            ) + extraVariables
+            GraalJsUtil.cachedEval(script, data)
+        } catch (e: Exception) {
+            warningL("WarningDifficultyAgentFailed", trigger, templateName, diffId, e.message ?: "Unknown error")
             e.printStackTrace()
         }
     }
@@ -605,11 +699,12 @@ class DungeonInstance(
 
     /**
      * 踢出指定玩家（通过玩家名）
+     * 管理员操作，跳过 onLeave 条件检查
      * @return 是否成功踢出
      */
     fun kickPlayer(playerName: String): Boolean {
         val player = Bukkit.getPlayerExact(playerName) ?: return false
-        return removePlayer(player)
+        return forceRemovePlayer(player)
     }
 
     /**
@@ -836,10 +931,7 @@ class DungeonInstance(
             io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.rollRewards(kit.rewards, count)
         }
 
-        for (reward in rewards) {
-            io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.executeReward(reward, player, this)
-        }
-        return true
+        return executeKitForPlayer(kit, kitName, rewards, player)
     }
 
     /**
@@ -855,23 +947,90 @@ class DungeonInstance(
         val players = getOnlinePlayers()
 
         if (kit.isChanceMode) {
-            // chance模式：每个玩家独立判定
             for (player in players) {
-                val rolled = io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.rewardsByChance(kit.rewards)
-                for (reward in rolled) {
-                    io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.executeReward(reward, player, this)
-                }
+                openKit(kitName, player)
             }
         } else {
-            // weight模式：从奖励池按权重抽取 min_rewards ~ max_rewards 个
             val count = kotlin.random.Random.nextInt(kit.minRewards, kit.maxRewards + 1)
             val rewards = io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.rollRewards(kit.rewards, count)
             for (player in players) {
-                for (reward in rewards) {
-                    io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.executeReward(reward, player, this)
-                }
+                executeKitForPlayer(kit, kitName, rewards, player)
             }
         }
+        return true
+    }
+
+    /**
+     * 对单个玩家执行Kit奖励（内部方法，包含冷却/条件/事件/消息/广播等完整流程）
+     * @param kit Kit配置
+     * @param kitName Kit名称
+     * @param rewards 已抽取的奖励列表（由调用方提前计算好）
+     * @param player 目标玩家
+     * @return 是否实际发放了奖励
+     */
+    private fun executeKitForPlayer(kit: KitConfig, kitName: String, rewards: List<KitReward>, player: Player): Boolean {
+        // 1. 冷却检查
+        if (kit.cooldown > 0) {
+            val remaining = io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.checkCooldown(player, templateName, kitName)
+            if (remaining != null) {
+                kit.messages?.get("cooldown")?.let { msg ->
+                    val parsed = msg.replace("%remaining%", (remaining / 1000).toString())
+                    player.sendMessage(MiniMessage.miniMessage().deserialize(parsed))
+                }
+                return false
+            }
+        }
+
+        // 2. 条件检查
+        if (!kit.conditions.isNullOrEmpty()) {
+            val vars = mapOf<String, Any?>("player" to player, "instance" to this)
+            if (!kit.conditions.evalKetherBoolean(player, vars, all = true)) {
+                kit.messages?.get("condition_fail")?.let { msg ->
+                    player.sendMessage(MiniMessage.miniMessage().deserialize(msg))
+                }
+                return false
+            }
+        }
+
+        // 3. Pre事件
+        val preEvent = io.github.zzzyyylllty.kangeldungeon.event.KitOpenPreEvent(this, kitName, player, kit)
+        preEvent.call()
+        if (preEvent.isCancelled) return false
+
+        // 4. 执行奖励
+        for (reward in rewards) {
+            io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.executeReward(reward, player, this)
+        }
+
+        // 5. Post事件
+        io.github.zzzyyylllty.kangeldungeon.event.KitOpenPostEvent(this, kitName, player, kit, rewards).call()
+
+        // 6. 应用冷却
+        if (kit.cooldown > 0) {
+            io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager.applyCooldown(player, templateName, kitName, kit.cooldown)
+        }
+
+        // 7. Kit打开消息
+        kit.messages?.get("open")?.let { msg ->
+            player.sendMessage(MiniMessage.miniMessage().deserialize(msg))
+        }
+
+        // 8. 全服广播
+        kit.broadcastMessage?.let { msg ->
+            val parsed = msg.replace("%player%", player.name)
+                .replace("%kit%", kit.displayName ?: kitName)
+            Bukkit.broadcast(MiniMessage.miniMessage().deserialize(parsed))
+        }
+
+        // 9. Meta统计 & 任务触发
+        meta.add("kit.open", 1)
+        meta.add("kit.open.$kitName", 1)
+        TaskManager.triggerTasks(this, "KIT_OPEN", mapOf(
+            "kitName" to kitName,
+            "player" to player,
+            "rewards" to rewards
+        ))
+
         return true
     }
 
@@ -1544,6 +1703,46 @@ class DungeonInstance(
         return MonsterManager.getMonsterInstances(this)
     }
 
+    // ==================== JS脚本可调用：任务管理 ====================
+
+    /**
+     * 获取本 dungeons 的任务配置映射
+     * JS: instance.getTaskConfigs()
+     * @return 任务配置映射 (taskId -> TaskConfig)
+     */
+    fun getTaskConfigs(): Map<String, TaskConfig> {
+        return KAngelDungeon.dungeonTaskConfigs[templateName] ?: emptyMap()
+    }
+
+    /**
+     * 手动触发指定任务
+     * JS: instance.triggerTask("taskId")
+     * @param taskId 任务 ID
+     * @return 是否找到并执行了任务
+     */
+    fun triggerTask(taskId: String): Boolean {
+        return TaskManager.triggerTask(this, taskId)
+    }
+
+    /**
+     * 获取任务的已执行次数
+     * JS: var count = instance.getTaskExecutionCount("taskId")
+     * @param taskId 任务 ID
+     * @return 已执行次数
+     */
+    fun getTaskExecutionCount(taskId: String): Int {
+        return TaskManager.getExecutionCount(this, taskId)
+    }
+
+    /**
+     * 重置任务的已执行次数
+     * JS: instance.resetTaskExecutionCount("taskId")
+     * @param taskId 任务 ID
+     */
+    fun resetTaskExecutionCount(taskId: String) {
+        TaskManager.resetExecutionCount(this, taskId)
+    }
+
     // ==================== JS脚本可调用：地牢交互管理 ====================
 
     /**
@@ -1611,6 +1810,27 @@ class DungeonInstance(
     fun getPlayerRegions(playerName: String): List<String> {
         val player = Bukkit.getPlayerExact(playerName) ?: return emptyList()
         return RegionManager.getPlayerRegions(worldName, player.uniqueId).toList()
+    }
+
+    // ==================== JS脚本可调用：难度查询 ===================
+
+    /**
+     * 获取当前难度 ID
+     * JS: instance.getDifficulty()
+     * @return 难度ID字符串，无难度时返回 null
+     */
+    fun getDifficulty(): String? = difficultyId
+
+    /**
+     * 获取当前难度的配置对象
+     * JS: var diff = instance.getDifficultyConfig()
+     *     diff.display  -> "Hard"
+     *     diff.meta     -> {global: {health_mult: 2.0}}
+     * @return DifficultyConfig 或 null（无难度）
+     */
+    fun getDifficultyConfig(): DifficultyConfig? {
+        val id = difficultyId ?: return null
+        return KAngelDungeon.dungeonDifficultyConfigs[templateName]?.get(id)
     }
 
     // ==================== JS脚本可调用：状态快捷查询 ===================

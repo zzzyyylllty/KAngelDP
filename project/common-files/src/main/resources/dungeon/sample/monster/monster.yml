@@ -4,6 +4,7 @@ zombies:
   active: true                         # default activation state / 默认激活状态
   respawnCooldown: 0                   # ticks between respawns (0 = no auto-respawn) / 重生冷却(tick)
   activationRange: -1                  # activation distance (-1 = infinite) / 激活距离
+  priority: 0                          # spawn priority, higher = spawned first / 生成优先级
   monsters:
     - mob: minecraft:zombie       # minecraft: prefix for vanilla mobs
       location: 115,-56,185
@@ -24,10 +25,14 @@ zombies:
       instance.addMeta("cleared_groups", 1);
     onRespawn: |-
       instance.sendMessageToAllPlayers("<yellow>Zombies respawned!</yellow>");
+    onEachKill: |-                  # triggered per individual mob kill / 每个怪物被击杀时触发
+      instance.addMeta("zombie_kills", 1);
+
 postironbars:
   active: true
   respawnCooldown: 0
   activationRange: -1
+  priority: 0
   monsters:
     - mob: mythicmobs:SkeletalKnight
       location: 146,-58,157
@@ -42,6 +47,7 @@ postironbars:
 
 
 boss_wave:
+  priority: 10                        # spawned first due to higher priority / 高优先级优先生成
   monsters:
     - mob: mythicmobs:SkeletalKing  # mythicmobs: prefix for MM mobs
       location: -112,-55,101
@@ -61,3 +67,149 @@ boss_wave:
       instance.sendMessageToAllPlayers("<green>Boss wave cleared!</green>");
       instance.firework(-112.0, -55.0, 101.0);
       instance.addMeta("boss_cleared", 1);
+
+# Delayed spawn example / 延迟刷怪示例
+# 地牢开始后 300 ticks (15秒) 自动生成
+delayed_zombies:
+  active: true
+  spawnDelay: 300                    # delay in ticks before first spawn / 首次生成延迟(tick)
+  activationRange: -1
+  monsters:
+    - mob: minecraft:zombie
+      location: 115,-56,185
+      amount: 4
+      scattered: 5
+      level: 1
+
+# Conditional spawn example / 条件刷怪示例
+# 当玩家击杀数 >= 5 时自动生成
+conditional_skeletons:
+  active: true
+  spawnCondition: |-                # JS expression, spawn only when true / JS 条件表达式
+    instance.getMetaAsInt("mob.kill.skeleton") >= 5
+  activationRange: -1
+  monsters:
+    - mob: minecraft:skeleton
+      location: 120,-56,190
+      amount: 3
+      scattered: 4
+      level: 2
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<yellow>Condition met! Skeletons incoming!</yellow>");
+
+# Delayed + conditional combined / 延迟 + 条件组合
+# 地牢开始 600 ticks (30秒) 后，且击杀数 >= 10 时生成
+elite_wave:
+  active: true
+  spawnDelay: 600
+  spawnCondition: |-
+    instance.getMetaAsInt("mob.kill.zombie") >= 10
+  activationRange: -1
+  monsters:
+    - mob: minecraft:zombie
+      location: 115,-56,185
+      amount: 6
+      scattered: 6
+      level: 3
+    - mob: minecraft:skeleton
+      location: 120,-56,190
+      amount: 3
+      scattered: 4
+      level: 3
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<red>Elite wave incoming! (after delay + condition met)</red>");
+
+# ==================== New Features Examples / 新功能示例 ====================
+
+# Respawn-limited group / 有限次重生示例
+# 最多重生 2 次后停止
+limited_respawns:
+  active: true
+  respawnCooldown: 200                # 10 seconds between respawns / 重生间隔10秒
+  maxRespawns: 2                      # only respawn twice / 只重生2次 (-1 = infinite, 0 = no respawn)
+  activationRange: -1
+  monsters:
+    - mob: minecraft:zombie
+      location: 115,-56,185
+      amount: 3
+      scattered: 3
+      level: 1
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<yellow>Limited respawn group spawned!</yellow>");
+    onRespawn: |-
+      instance.sendMessageToAllPlayers("<yellow>Respawn " + (instance.getActiveMonsters().get("limited_respawns").respawnCount + 1) + "/2</yellow>");
+    onAllKilled: |-
+      instance.sendMessageToAllPlayers("<green>Limited respawn group cleared!</green>");
+
+# Leashed group / 拴绳范围示例
+# 怪物不会离开刷怪点 10 格以外
+leashed_guards:
+  active: true
+  leashRange: 10                      # pulled back to spawn if further than 10 blocks / 超出10格拉回
+  activationRange: -1
+  monsters:
+    - mob: minecraft:zombie
+      location: 130,-56,175
+      amount: 2
+      scattered: 2
+      level: 2
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<yellow>Guards are leashed to their post!</yellow>");
+
+# Health & damage scaling / 属性倍率示例
+# 所有怪物 3 倍生命、2 倍伤害
+elite_guards:
+  active: true
+  healthMultiplier: 3.0               # 3x health / 3倍生命
+  damageMultiplier: 2.0               # 2x damage / 2倍伤害
+  activationRange: -1
+  monsters:
+    - mob: minecraft:zombie
+      location: 130,-56,185
+      amount: 2
+      scattered: 2
+      level: 0
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<red>Elite guards have 3x health and 2x damage!</red>");
+
+# Staggered spawn / 依次生成示例
+# 每个怪物间隔 10 ticks (0.5秒) 生成，不是同时全部出现
+staggered_wave:
+  active: true
+  spawnDelay: 100                     # first spawn after 5 seconds / 5秒后首次生成
+  spawnInterval: 10                   # 10 ticks between each mob / 每个间隔10tick
+  activationRange: -1
+  monsters:
+    - mob: minecraft:zombie
+      location: 115,-56,185
+      amount: 5
+      scattered: 4
+      level: 1
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<yellow>Staggered wave incoming (one by one)!</yellow>");
+
+# Respawn with condition / 条件重生示例
+# 只在击杀数 < 20 时重生，超过后不再重生
+conditional_respawn:
+  active: true
+  respawnCooldown: 300                # 15 seconds / 15秒
+  respawnCondition: |-               # JS condition for respawn, separate from spawnCondition / 重生条件
+    instance.getMetaAsInt("mob.kill") < 20
+  activationRange: -1
+  monsters:
+    - mob: minecraft:skeleton
+      location: 120,-56,195
+      amount: 2
+      scattered: 3
+      level: 1
+  agent:
+    onSpawn: |-
+      instance.sendMessageToAllPlayers("<yellow>Skeletons will respawn until 20 total kills!</yellow>");
+    onAllKilled: |-
+      instance.addMeta("skeleton_wave_cleared", 1);

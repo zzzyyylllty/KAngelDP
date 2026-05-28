@@ -23,40 +23,34 @@ allprojects {
     apply(plugin = "maven-publish")
     taboolib {
         env {
-            // 调试模式
-            debug = true
-            // 是否在开发模式下强制下载依赖
+            debug = false
             forceDownloadInDev = false
-            // 中央仓库地址
-            repoCentral = "https://maven.aliyun.com/repository/central"
-            // TabooLib 仓库地址
-//            repoTabooLib = "https://repo.xiao-jie.top/repository/maven-releases"
+            // repoCentral = "https://maven.aliyun.com/repository/central" — removed, use default
             repoTabooLib = "https://repo.tabooproject.org/repository/releases"
-//            repoTabooLib = project.repositories.mavenLocal().url.toString()
-            // 依赖下载目录
             fileLibs = "libraries"
-            // 资源下载目录
             fileAssets = "assets"
-            // 是否启用隔离加载器（即完全隔离模式）
             enableIsolatedClassloader = false
-            install(Basic, Bukkit, BukkitHook, BukkitNMSUtil, Database, Kether, CommandHelper, BukkitNMSItemTag, JavaScript, BukkitUI, BukkitUtil, Jexl, Metrics, DatabasePlayer)
-            // install("bukkit-nms-tag-component")
+            install(
+                Basic, Bukkit, BukkitHook, BukkitNMSUtil, Database, Kether,
+                CommandHelper, BukkitNMSItemTag, JavaScript, BukkitUI,
+                BukkitUtil, Jexl, Metrics, DatabasePlayer, BukkitNMS
+            )
         }
         version {
             taboolib = rootProject.libs.versions.taboolib.get()
             coroutines = "1.7.3"
-            // 跳过 Kotlin 加载
             skipKotlin = false
-            // 跳过 Kotlin 重定向
             skipKotlinRelocate = false
-            // 跳过 TabooLib 重定向
             skipTabooLibRelocate = false
-
         }
     }
 
     repositories {
         mavenLocal()
+
+        maven {
+            url = uri("https://repo.tabooproject.org/repository/releases/")
+        }
         maven("https://repo.gtemc.net/releases/")
         maven("https://repo.auxilor.io/repository/maven-public/")
         maven("https://nexus.phoenixdevt.fr/repository/maven-public/")
@@ -139,7 +133,10 @@ allprojects {
         implementation("com.sk89q.worldguard:worldguard-core:7.0.10-SNAPSHOT")
 
         // 服务器 API
-        implementation(rootProject.libs.paperapi)
+        implementation(rootProject.libs.paperapi) {
+            isTransitive = false
+            exclude(group = "com.mojang.datafixers")
+        }
 
         // Minecraft 相关库 (仅编译时需要)
         compileOnly(rootProject.libs.mythiclibdist)
@@ -153,16 +150,21 @@ allprojects {
         compileOnly(rootProject.libs.caffeine)
         compileOnly(rootProject.libs.gson)
 
-        compileOnly("net.momirealms:craft-engine-core:0.0.66")
-        compileOnly("net.momirealms:craft-engine-bukkit:0.0.66")
         // 核心功能库 (运行时需要)
         implementation(rootProject.libs.bundles.reflex)
         implementation(rootProject.libs.bundles.asm)
         implementation(rootProject.libs.bundles.adventure)
-        taboo(rootProject.libs.arim)
+//        taboo(rootProject.libs.arim)
+        compileOnly("ink.ptms.chemdah:api:1.1.17")
         taboo("cn.gtemc:itembridge:1.0.18")
         compileOnly(rootProject.libs.bundles.jackson)
         taboo(rootProject.libs.kotlin.stdlib)
+    }
+
+    configurations {
+        all {
+            exclude(group = "com.mojang.datafixers")
+        }
     }
 
 

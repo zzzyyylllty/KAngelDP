@@ -30,6 +30,7 @@ import taboolib.expansion.setupPlayerDatabase
 import taboolib.module.configuration.Config
 import taboolib.module.configuration.Configuration
 import taboolib.module.database.getHost
+import taboolib.module.kether.Kether
 import taboolib.module.lang.asLangText
 import taboolib.module.kether.KetherShell
 import taboolib.module.lang.Language
@@ -72,6 +73,10 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     val dungeonPlanConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, Plan>>()
     val dungeonRegionConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, RegionConfig>>()
     val dungeonKitConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, KitConfig>>()
+    // Per-dungeon task configs
+    val dungeonTaskConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, TaskConfig>>()
+    // Per-dungeon difficulty configs
+    val dungeonDifficultyConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, DifficultyConfig>>()
     // Global fallback (backward compat)
     val obstacleConfigs = ConcurrentHashMap<String, ObstacleConfig>()
     val monsterConfigs = ConcurrentHashMap<String, MonsterConfig>()
@@ -121,6 +126,10 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     override fun onEnable() {
 
         infoL("Enable")
+
+        val parser = Kether.scriptRegistry.getParser("kdp", "kether")
+        println("kdp parser registered: ${parser.isPresent}")
+        println("All registered actions: ${Kether.scriptRegistry.getRegisteredActions()}")
         Language.enableSimpleComponent = true
         reloadCustomConfig()
 
@@ -135,6 +144,14 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
             submit(delay = 40L) {
                 cleanupResidualWorlds()
             }
+        }
+
+        // 尝试加载 Chemdah 任务挂钩（软依赖，不存在时静默跳过）
+        try {
+            val chemdahClass = Class.forName("io.github.zzzyyylllty.kangeldungeon.util.chemdah.ChemdahObjectives")
+            chemdahClass.getMethod("register").invoke(null)
+        } catch (_: Throwable) {
+            // Chemdah 未安装或挂载失败，静默跳过
         }
     }
 
@@ -165,12 +182,6 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
         // 关闭所有线程的 GraalJS Context，释放原生内存
         GraalJsUtil.closeCurrentContext()
     }
-    /*
-    fun compat() {
-        if (Bukkit.getPluginManager().getPlugin("Chemdah") != null) {
-            connectChemdah()
-        }
-    }*/
 
     /**
      * 启动地牢生命周期Tick任务（每秒运行一次）
@@ -248,20 +259,67 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                         if (template != null) {
                             // 超时检查：优先触发
                             if (instance.isTimedOut(template)) {
+                                if (config.getBoolean("notify.on-timeout", true)) {
+                                    instance.sendTitleToAllPlayers(
+                                        console.asLangText("DungeonTimeoutTitle"),
+                                        console.asLangText("DungeonTimeoutSubtitle", config.getString("auto-exit-delay", "60")),
+                                        10, 80, 20
+                                    )
+                                    instance.broadcastSound("entity_wither_spawn", 2.0f, 0.5f)
+                                }
                                 instance.fail()
-                                instance.sendMessageToAllPlayers(console.asLangText("DungeonTimeout"))
                             } else if (instance.areAllPlayersDead()) {
                                 // 使用 else if 防止超时和全灭同时触发导致重复消息
+                                if (config.getBoolean("notify.on-all-dead", true)) {
+                                    instance.sendTitleToAllPlayers(
+                                        console.asLangText("DungeonAllDeadTitle"),
+                                        console.asLangText("DungeonAllDeadSubtitle", config.getString("auto-exit-delay", "60")),
+                                        10, 80, 20
+                                    )
+                                    instance.broadcastSound("entity_wither_death", 2.0f, 0.5f)
+                                }
                                 instance.fail()
-                                instance.sendMessageToAllPlayers(console.asLangText("DungeonAllDead"))
                             }
                         }
                     }
                     DungeonState.COMPLETED, DungeonState.FAILED -> {
-                        // 结束后60秒自动清理
                         val completedAt = instance.completedAt ?: now
-                        if (now - completedAt >= 60_000) {
+                        val autoExitDelay = config.getLong("auto-exit-delay", 60) * 1000
+                        val notifyInterval = config.getInt("auto-exit-notify-interval", 5).coerceAtLeast(1)
+                        val countdownLast = config.getInt("auto-exit-countdown-last-seconds", 10).coerceAtLeast(1)
+
+                        if (now - completedAt >= autoExitDelay) {
                             toRemove.add(uuid)
+                        } else {
+                            // 首次进入结束状态时显示完成/失败标题
+                            if (instance.lastEndCountdownRemaining == -1) {
+                                if (instance.state == DungeonState.COMPLETED && config.getBoolean("notify.on-complete", true)) {
+                                    instance.sendTitleToAllPlayers(
+                                        console.asLangText("DungeonCompletedTitle"),
+                                        console.asLangText("DungeonCompletedSubtitle"),
+                                        10, 80, 20
+                                    )
+                                    instance.broadcastSound("entity_firework_rocket_blast", 2.0f, 1.0f)
+                                } else if (instance.state == DungeonState.FAILED && config.getBoolean("notify.on-fail", true)) {
+                                    instance.sendTitleToAllPlayers(
+                                        console.asLangText("DungeonFailedTitle"),
+                                        console.asLangText("DungeonFailedSubtitle"),
+                                        10, 80, 20
+                                    )
+                                    instance.broadcastSound("entity_wither_death", 2.0f, 0.5f)
+                                }
+                            }
+
+                            val remaining = ((autoExitDelay - (now - completedAt)) / 1000).toInt()
+                            if (remaining != instance.lastEndCountdownRemaining) {
+                                instance.lastEndCountdownRemaining = remaining
+                                // 按间隔或最后几秒显示倒计时
+                                if (remaining <= countdownLast || remaining % notifyInterval == 0) {
+                                    instance.sendActionBarToAllPlayers(
+                                        console.asLangText("DungeonEndAutoExit", remaining.toString())
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -311,6 +369,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                     dungeonInteractConfigs.clear()
                     dungeonPlanConfigs.clear()
                     dungeonRegionConfigs.clear()
+                    dungeonDifficultyConfigs.clear()
                     obstacleConfigs.clear()
                     monsterConfigs.clear()
                 }
@@ -347,7 +406,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
 
         if (worldFolders.isEmpty()) return
 
-        console.asLangText("ResidualWorldsCleanupStart").let { console.sendMessage(it) }
+        infoL("ResidualWorldsCleanupStart")
 
         var cleaned = 0
         for (folder in worldFolders) {
@@ -364,7 +423,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
             }
         }
 
-        console.asLangText("ResidualWorldsCleanupDone", cleaned.toString()).let { console.sendMessage(it) }
+        infoL("ResidualWorldsCleanupDone", cleaned.toString())
     }
 
     /**

@@ -12,6 +12,7 @@ import io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager
 import io.github.zzzyyylllty.kangeldungeon.util.monster.MonsterManager
 import io.github.zzzyyylllty.kangeldungeon.util.obstacle.ObstacleManager
 import io.github.zzzyyylllty.kangeldungeon.util.plan.PlanManager
+import io.github.zzzyyylllty.kangeldungeon.util.task.TaskManager
 import io.github.zzzyyylllty.kangeldungeon.util.region.RegionManager
 import io.github.zzzyyylllty.kangeldungeon.function.kether.evalKether
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
@@ -73,7 +74,8 @@ fun registerExternalData() {
             "RegionManager" to RegionManager,
             "PlanManager" to PlanManager,
             "KitManager" to KitManager,
-            "DungeonHelper" to DungeonHelper
+            "DungeonHelper" to DungeonHelper,
+            "TaskManager" to TaskManager
         ))
     val event = KAngelDungeonCustomScriptDataLoadEvent(defaultData)
     event.call()
