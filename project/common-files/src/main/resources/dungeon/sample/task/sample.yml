@@ -1,0 +1,59 @@
+# =============================================
+# Sample Dungeon Tasks / 示例地牢任务
+# Tasks listen to dungeon events and execute JS scripts
+# 任务监听地牢事件并自动执行 JS 脚本
+# =============================================
+
+on_mob_killed:
+  # Trigger type / 触发器类型
+  # MOB_KILL, PLAYER_DEATH, PLAYER_JOIN, PLAYER_LEAVE,
+  # DUNGEON_START, DUNGEON_COMPLETE, DUNGEON_FAIL,
+  # MONSTER_GROUP_CLEAR, MONSTER_SPAWN, CUSTOM
+  trigger: MOB_KILL
+  # Optional filters / 可选过滤条件 (all must match)
+  filters:
+    mob_type: SKELETON
+  # Max executions (-1 = unlimited) / 最大执行次数
+  maxExecutions: -1
+  # Cooldown in ticks (20 ticks = 1 second) / 冷却时间(tick)
+  cooldown: 0
+  # Script to execute / 触发时执行的脚本
+  agent:
+    onTrigger: |-
+      instance.sendMessageToAllPlayers("<yellow>A skeleton was killed!</yellow>");
+      instance.addMeta("skeleton_kills", instance.getMetaAsInt("skeleton_kills") + 1);
+      var count = instance.getMetaAsInt("skeleton_kills");
+      if (count >= 10) {
+        instance.sendMessageToAllPlayers("<green>10 skeletons killed! Bonus reward!</green>");
+      }
+
+on_player_death:
+  trigger: PLAYER_DEATH
+  maxExecutions: 3
+  agent:
+    onTrigger: |-
+      instance.sendMessageToAllPlayers("<red>" + playerName + " has died!</red>");
+      instance.addMeta("deaths", 1);
+
+on_all_mobs_cleared:
+  trigger: MONSTER_GROUP_CLEAR
+  filters:
+    config_id: postironbars
+  agent:
+    onTrigger: |-
+      instance.sendMessageToAllPlayers("<green>All post-ironbar mobs cleared!</green>");
+      instance.openObstacle("ironbars");
+
+on_dungeon_start:
+  trigger: DUNGEON_START
+  agent:
+    onTrigger: |-
+      instance.sendMessageToAllPlayers("<aqua>Task system ready! Dungeon has started.</aqua>");
+      instance.setMeta("task_start_time", Sys.currentTimeMillis());
+
+on_dungeon_complete:
+  trigger: DUNGEON_COMPLETE
+  agent:
+    onTrigger: |-
+      var elapsed = (Sys.currentTimeMillis() - instance.getMetaAsLong("task_start_time")) / 1000;
+      instance.sendMessageToAllPlayers("<green>Dungeon completed in " + elapsed + " seconds!</green>");

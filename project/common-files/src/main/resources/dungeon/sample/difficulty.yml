@@ -1,0 +1,60 @@
+# Difficulty configuration / 难度配置
+# Per-dungeon difficulty levels with different starting meta and lifecycle scripts.
+# 每个地牢可独立配置不同难度，每个难度有独立的起始meta和生命周期脚本。
+#
+# JS variables available in agents / 代理脚本可用变量:
+#   instance  - DungeonInstance
+#   template  - DungeonTemplate
+#   difficulty - DifficultyConfig
+#   player    - Player (仅 onCheck)
+#
+# Triggers / 触发器:
+#   onStart    - Called when dungeon starts / 地牢开始时
+#   onComplete - Called when dungeon is completed / 通关时
+#   onFail     - Called when dungeon fails / 失败时
+
+difficulties:
+  easy:
+    display: "Easy"
+    description: "Relaxed difficulty for beginners"
+    # Starting meta values merged into DungeonInstance.meta on creation
+    # death.maxRespawns: 覆盖 option.yml 中的最大复活次数
+    # death.autoRespawnDelay: 覆盖自动复活延迟
+    meta:
+      global:
+        difficulty_mult: 0.8
+        death.maxRespawns: 5
+        death.autoRespawnDelay: 3
+    agents:
+      onStart: |-
+        instance.sendMessageToAllPlayers("<green>Easy mode activated! Damage reduced.</green>");
+
+  normal:
+    display: "Normal"
+    description: "Standard difficulty"
+    meta:
+      global:
+        difficulty_mult: 1.0
+        death.maxRespawns: 2
+        death.autoRespawnDelay: 5
+    agents:
+      onStart: |-
+        instance.sendMessageToAllPlayers("<yellow>Normal mode</yellow>");
+
+  hard:
+    display: "Hard"
+    description: "For experienced players"
+    meta:
+      global:
+        difficulty_mult: 1.5
+        death.maxRespawns: 0
+        death.autoRespawnDelay: 0
+    agents:
+      onStart: |-
+        instance.sendMessageToAllPlayers("<red><bold>Hard mode activated!</bold></red>");
+        instance.sendTitleToAllPlayers("<red>Hard Mode</red>", "<gray>Enemies are stronger!</gray>", 10, 40, 10);
+        instance.applyPotionEffectToAllPlayers("RESISTANCE", 10, 0);
+    onComplete: |-
+      instance.sendMessageToAllPlayers("<gold>Hard mode completed! Extra rewards!</gold>");
+    onFail: |-
+      instance.sendMessageToAllPlayers("<red>Hard mode failed! Better luck next time.</red>");

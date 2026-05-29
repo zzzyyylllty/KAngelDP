@@ -1,0 +1,74 @@
+# =============================================
+# Sample Obstacle Config / 示例障碍物配置
+# Used via instance.prepareObstacle / activateObstacle / openObstacle
+# 通过 instance.prepareObstacle / activateObstacle / openObstacle 使用
+# =============================================
+ironbars:
+  agent:
+    # onPrepare: Called when saving block states / 保存方块状态时调用
+    onPrepare: |-
+      // TODO: Notify players about the obstacle / 通知玩家障碍物信息
+      instance.sendMessageToAllPlayers("<yellow>Obstacle preparing... / 障碍物准备中...");
+    # onStart: Called when the obstacle is activated (blocks appear) / 障碍物激活(围栏升起)时调用
+    onStart: |-
+      // TODO: Play activation effect / 播放激活效果
+      instance.sendMessageToAllPlayers("<red>Obstacle activated! / 障碍物已激活！");
+      instance.playSoundAt("block_iron_door_close", 137.0, -57.0, 182.0, 2.0, 0.8);
+  openDelaySeconds: 3
+  activeDurationSeconds: 10
+
+  openingAnimation:
+    enabled: true
+    particle: END_ROD
+    particleCount: 20
+    sound: BLOCK_LEVER_CLICK
+    volume: 1.0
+    pitch: 1.0
+    durationTicks: 20
+    intervalTicks: 2
+
+  closingAnimation:
+    enabled: true
+    particle: SMOKE_NORMAL
+    particleCount: 15
+
+  obstacles:
+    gate1:
+      id: "gate1"
+      mode: RESTORE_BLOCKS
+
+      #      blocks:
+      #        0:
+      #          x: 101
+      #          y: 64
+      #          z: 200
+      #        1:
+      #          x: 102
+      #          y: 64
+      #          z: 200
+      cuboid:
+        pos1:
+          x: 137
+          y: -56
+          z: 184
+        pos2:
+          x: 137
+          y: -58
+          z: 181
+
+      sequentialConfig:
+        enabled: true
+        openDirection: LEFT_TO_RIGHT
+        reverseOnClose: true
+        blocksPerStep: 1
+        stepDelayTicks: 2
+
+        openEffect:
+          enabled: true
+          particle: WHITE_SMOKE
+          count: 8
+
+        closeEffect:
+          enabled: true
+          particle: WHITE_SMOKE
+          count: 6

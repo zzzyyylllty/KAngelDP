@@ -1,0 +1,59 @@
+# ========================
+# 全局 Kit 配置示例
+# ========================
+# 全局 Kit 位于 plugins/KAngelDungeon/kits/ 目录下，所有地牢通用
+# 地牢内也可定义同名 Kit（位于 dungeon/<地牢ID>/kit/），地牢版本会覆盖全局版本
+#
+# 通过 JS: instance.openKit("kit名称", player)
+#        instance.openKitToAll("kit名称")
+# 调用
+#
+# 支持两种模式:
+#   - weight: 从奖励池按权重抽取 min_rewards ~ max_rewards 个（默认）
+#   - chance: 每个奖励独立按百分比概率判定，通过则固定获得
+
+# ========== 全局通用通关奖励 ==========
+global_reward:
+  display:
+    name: "<gold>关卡奖励"
+    material: CHEST
+  rewards:
+    - type: item
+      source: minecraft
+      item: diamond
+      amount: 1
+      weight: 50
+
+    - type: command
+      command: "give %player% minecraft:iron_ingot 5"
+      weight: 40
+
+    - type: command
+      command: "eco give %player% 50"
+      weight: 20
+
+    - type: script
+      weight: 10
+      script: |-
+        player.sendMessage("<green>恭喜获得全局奖励！</green>");
+
+  min_rewards: 1
+  max_rewards: 2
+
+# ========== 全局每日奖励示例 ==========
+daily_bonus:
+  display:
+    name: "<aqua>每日奖励</aqua>"
+    material: ENDER_CHEST
+  cooldown: 86400
+  rewards:
+    - type: item
+      source: minecraft
+      item: emerald
+      amount: 2
+      weight: 100
+    - type: command
+      command: "give %player% minecraft:experience_bottle 8"
+      weight: 60
+  min_rewards: 1
+  max_rewards: 1

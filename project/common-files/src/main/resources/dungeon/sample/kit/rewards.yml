@@ -1,0 +1,164 @@
+# ========================
+# 地牢奖励包 (Kit) 配置示例
+# ========================
+# Kit 位于 dungeon/<地牢ID>/kit/ 目录下
+# 通过 JS: instance.openKit("kit名称", player)
+#        instance.openKitToAll("kit名称")
+# 调用
+#
+# 支持两种模式:
+#   - weight: 从奖励池按权重抽取 min_rewards ~ max_rewards 个（默认）
+#   - chance: 每个奖励独立按百分比概率判定，通过则固定获得
+
+# ========== weight模式（按权重抽取） ==========
+completion_chest:
+  display:
+    name: "<gold>通关奖励"
+    material: CHEST
+  rewards:
+    # ---- 物品奖励 ----
+    - type: item
+      source: minecraft         # 物品源: minecraft / craftengine / itemsadder / oraxen
+      item: diamond
+      amount: 1
+      weight: 50                # 权重越高，抽中概率越大
+      parameters:
+        display-name: "<gradient:#55ff55:#aaffaa>通关钻石</gradient>"
+        lore:
+          - "<gray>恭喜通关地牢！</gray>"
+          - "<dark_gray>来自KAngelDungeon的奖励</dark_gray>"
+
+    - type: item
+      source: craftengine
+      item: "default:topaz"
+      amount: 3
+      weight: 30
+      parameters:
+        display-name: "<gold>黄玉</gold>"
+
+    # ---- 命令奖励 ----
+    - type: command
+      command: "give %player% minecraft:iron_ingot 5"
+      weight: 40
+
+    - type: command
+      command: "eco give %player% 100"
+      weight: 20
+
+    # ---- JS脚本奖励 ----
+    - type: script
+      weight: 10
+      script: |-
+        player.sendMessage("<light_purple>🌟 恭喜获得隐藏脚本奖励！</light_purple>");
+        instance.giveExperienceToAllPlayers(50);
+
+    # ---- Agent脚本奖励 ----
+    - type: agent
+      weight: 5
+      agent-trigger: onKitReward
+      agent-script: |-
+        player.sendMessage("<gold>⚡ 触发特殊Agent奖励！</gold>");
+        var fireworks = player.getWorld().spawn(player.getLocation(), org.bukkit.entity.Firework.class);
+        var meta = fireworks.getFireworkMeta();
+        meta.addEffect(org.bukkit.FireworkEffect.builder().withColor(org.bukkit.Color.RED).build());
+        fireworks.setFireworkMeta(meta);
+
+  min_rewards: 1   # 最少抽取 1 个奖励
+  max_rewards: 3   # 最多抽取 3 个奖励
+
+# ===== 普通参与奖励 (weight模式) =====
+participation_reward:
+  rewards:
+    - type: item
+      source: minecraft
+      item: cooked_beef
+      amount: 5
+      weight: 80
+
+    - type: command
+      command: "give %player% minecraft:arrow 10"
+      weight: 20
+    - type: command
+      command: "give %player% minecraft:golden_apple 1"
+      weight: 10
+
+  min_rewards: 1
+  max_rewards: 2
+
+# ========== chance模式（每个奖励独立概率） ==========
+# 每个奖励独立按 chance% 概率判定，不受 min/max_rewards 限制
+# 多个奖励可同时获得（如果全部判定通过）
+boss_drop:
+  display:
+    name: "<red>Boss掉落"
+    material: PLAYER_HEAD
+  rewards:
+    - type: item
+      source: minecraft
+      item: netherite_ingot
+      amount: 1
+      chance: 10                # 10% 独立概率获得
+      parameters:
+        display-name: "<gradient:#ff5555:#ffaaaa>BOSS掉落物</gradient>"
+
+    - type: item
+      source: minecraft
+      item: diamond
+      amount: 3
+      chance: 40                # 40% 独立概率获得
+
+    - type: command
+      command: "give %player% minecraft:experience_bottle 16"
+      chance: 60                # 60% 独立概率获得
+
+    - type: command
+      command: "give %player% minecraft:cooked_beef 5"
+      chance: 80                # 80% 独立概率获得
+
+    - type: script
+      chance: 25
+      script: |-
+        player.sendMessage("<aqua>🫧 Boss额外掉落了稀有脚本奖励！</aqua>");
+
+# ========== 带冷却、条件、消息、广播的 Kit 示例 ==========
+daily_reward:
+  display:
+    name: "<aqua>每日奖励</aqua>"
+    material: ENDER_CHEST
+  cooldown: 86400           # 24小时冷却（秒），0表示无冷却
+  conditions:               # Kether条件列表，全部通过才能打开
+    - "check player level > 5"
+  broadcast_message: "<yellow>%player%</yellow> <gold>获得了每日奖励！</gold>"  # 全服广播，支持%player%/%kit%占位符
+  messages:                 # 自定义消息（MiniMessage格式）
+    open: "<gold>你领取了每日奖励！</gold>"
+    cooldown: "<red>你已经领取过每日奖励了，剩余 <yellow>%remaining%</yellow> 秒。</red>"
+    condition_fail: "<red>你不满足领取每日奖励的条件。</red>"
+  rewards:
+    - type: item
+      source: minecraft
+      item: diamond
+      amount: 3
+      weight: 100
+      message: "<gold>你获得了 <yellow>3颗钻石</yellow>！</gold>"
+      components:           # 物品组件（1.20.5+支持）
+        "minecraft:enchantment_glint_override": true
+
+    - type: command
+      command: "eco give %player% 500"
+      weight: 80
+      message: "<gold>你获得了 <yellow>$500</yellow>！</gold>"
+
+    - type: command
+      command: "give %player% minecraft:emerald 5"
+      chance: 50
+      message: "<green>你获得了 <yellow>5颗绿宝石</yellow>！</green>"
+
+    - type: script
+      chance: 10
+      script: |-
+        player.sendMessage("<light_purple>🌟 你触发了每日稀有奖励！</light_purple>");
+        instance.giveExperienceToAllPlayers(100);
+      message: "<light_purple>🌟 每日稀有奖励已触发！</light_purple>"
+
+  min_rewards: 1
+  max_rewards: 2

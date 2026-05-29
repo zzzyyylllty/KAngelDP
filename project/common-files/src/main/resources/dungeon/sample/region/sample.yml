@@ -1,0 +1,37 @@
+# =============================================
+# Sample Region Config / 示例区域配置
+# Players entering/leaving these cuboid regions
+# trigger agent scripts
+# =============================================
+
+# A simple welcome region at spawn
+spawn_zone:
+  from: -5 60 -5
+  to: 5 70 5
+  agent:
+    onEnter: |-
+      player.sendMessage("<green>Welcome to the dungeon!</green>");
+      instance.sendMessageToAllPlayers("<yellow>" + player.name + " has arrived at spawn.</yellow>");
+    onLeave: |-
+      player.sendMessage("<gray>You left the spawn zone.</gray>");
+
+# Boss arena region — triggers on enter
+boss_arena:
+  from: 80 40 80
+  to: 120 60 120
+  agent:
+    onEnter: |-
+      player.sendMessage("<red>You entered the boss arena! Prepare for battle!</red>");
+      instance.playSoundAt("entity_wither_spawn", 100.0, 50.0, 100.0, 2.0, 1.0);
+    onLeave: |-
+      player.sendMessage("<red>You retreated from the boss arena!</red>");
+
+# Safe zone — no onLeave, just onEnter
+safe_zone:
+  from: -10 60 -10
+  to: 10 70 10
+  agent:
+    onEnter: |-
+      player.sendMessage("<aqua>You are in a safe zone. Health regenerated!</aqua>");
+      player.setHealth(player.getMaxHealth());
+      player.setFoodLevel(20);
