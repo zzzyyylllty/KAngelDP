@@ -33,6 +33,9 @@ open class SafeSystemUtil {
     fun getProperty(key: String, default: String): String = System.getProperty(key, default)
 
     fun sleep(millis: Long) {
+        if (org.bukkit.Bukkit.isPrimaryThread()) {
+            throw IllegalStateException("Sys.sleep() must not be called on the main server thread")
+        }
         Thread.sleep(millis)
     }
 

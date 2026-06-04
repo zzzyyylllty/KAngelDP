@@ -9,6 +9,7 @@ import io.github.zzzyyylllty.kangeldungeon.team.TeamProvider
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
 import io.github.zzzyyylllty.kangeldungeon.util.KAngelDungeonLocalDependencyHelper
 import io.github.zzzyyylllty.kangeldungeon.util.dependencies
+import io.github.zzzyyylllty.kangeldungeon.util.deleteDirectory
 import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper
 import io.github.zzzyyylllty.kangeldungeon.util.monster.MonsterManager
 import io.github.zzzyyylllty.kangeldungeon.util.obstacle.ObstacleManager
@@ -187,7 +188,7 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
         GraalJsUtil.closeCurrentContext()
 
         // 关闭数据库连接池
-        try { (dataSource as? java.io.Closeable)?.close() } catch (_: Exception) {}
+        try { (dataSource as? AutoCloseable)?.close() } catch (_: Exception) {}
     }
 
     /**
@@ -436,39 +437,6 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
 
         infoL("ResidualWorldsCleanupDone", cleaned.toString())
     }
-
-    /**
-     * 递归删除目录（含重试机制）
-     */
-    private fun deleteDirectory(directory: File, maxRetries: Int = 5): Boolean {
-        if (!directory.exists()) return true
-
-        if (directory.isDirectory) {
-            directory.listFiles()?.forEach { file ->
-                deleteDirectory(file, maxRetries)
-            }
-        }
-
-        var retries = 0
-        while (retries < maxRetries) {
-            if (directory.delete()) return true
-            retries++
-            if (retries < maxRetries) {
-                try {
-                    Thread.sleep(200)
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    break
-                }
-            }
-        }
-
-        if (directory.exists()) {
-            warningL("WarningDeleteDirectoryFailed", directory.name)
-        }
-        return !directory.exists()
-    }
-
 
     fun solveDependencies(dependencies: List<String>, useTaboo: Boolean = true) {
         info("Starting loading dependencies...")

@@ -17,6 +17,7 @@ import org.bukkit.entity.EntityType
 import org.bukkit.entity.LivingEntity
 import org.bukkit.entity.Player
 import org.bukkit.event.entity.EntityDeathEvent
+import org.bukkit.event.entity.EntityRemoveEvent
 import taboolib.common.platform.event.SubscribeEvent
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -183,6 +184,7 @@ object MonsterManager {
             } else {
                 val delay = i * interval
                 taboolib.common.platform.function.submit(delay = delay) {
+                    if (Bukkit.getWorld(worldKey) == null) return@submit
                     val entity = spawnMob(world, loc, entry.mob, entry.level) ?: return@submit
                     entityOwnerMap[entity.uniqueId] = worldKey
                     entityToConfigMap[entity.uniqueId] = configId
@@ -420,6 +422,21 @@ object MonsterManager {
         }
     }
 
+    /**
+     * 实体自然消失/被移除时的清理（非击杀导致的移除）
+     * 清理 entityOwnerMap、entityToConfigMap 和对应怪物组中的实体追踪
+     */
+    fun onEntityRemoved(entity: LivingEntity) {
+        val entityId = entity.uniqueId
+        val worldName = entityOwnerMap[entityId] ?: return
+        val configId = entityToConfigMap[entityId]
+        entityOwnerMap.remove(entityId)
+        entityToConfigMap.remove(entityId)
+        if (configId != null) {
+            activeMonsters[worldName]?.get(configId)?.spawnedMobs?.remove(entityId)
+        }
+    }
+
     // ==================== 激活控制 ====================
 
     /**
@@ -536,7 +553,6 @@ object MonsterManager {
 
             // 拴绳范围检查 — 将超出范围的怪物拉回最近的刷怪点
             if (config.leashRange > 0) {
-                val world = instance.world ?: continue
                 var spawnCenter: Location? = null
                 for (entry in config.monsters) {
                     spawnCenter = Location(world, entry.location.x, entry.location.y, entry.location.z)
@@ -668,5 +684,13 @@ object MonsterListener {
     fun onEntityDeath(event: EntityDeathEvent) {
         val entity = event.entity
         MonsterManager.onMobKill(entity)
+    }
+
+    @SubscribeEvent
+    fun onEntityRemove(event: EntityRemoveEvent) {
+        val entity = event.entity
+        if (entity is LivingEntity) {
+            MonsterManager.onEntityRemoved(entity)
+        }
     }
 }

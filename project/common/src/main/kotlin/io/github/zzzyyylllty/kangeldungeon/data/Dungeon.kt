@@ -187,6 +187,8 @@ class DungeonInstance(
     val difficultyId: String? = null
 ) {
 
+    private val stateLock = Any()
+
     /**
      * 获取Bukkit世界名称
      */
@@ -348,7 +350,7 @@ class DungeonInstance(
      * @return 地牢是否开始成功，如果地牢开始事件被取消或者地牢已经开始则会返回false
      */
     fun start(): Boolean {
-        synchronized(this) {
+        synchronized(stateLock) {
             if (state != DungeonState.PREPARING) {
                 warningL("WarningDungeonAlreadyStarted", templateName, uuid)
                 return false
@@ -361,7 +363,7 @@ class DungeonInstance(
         if (event.isCancelled) return false
 
         // 3. 执行状态变更
-        synchronized(this) {
+        synchronized(stateLock) {
             if (state != DungeonState.PREPARING) return false
             state = DungeonState.ACTIVE
         }
@@ -413,7 +415,7 @@ class DungeonInstance(
      * @return 是否成功触发完成逻辑
      */
     fun complete(): Boolean {
-        synchronized(this) {
+        synchronized(stateLock) {
             if (state != DungeonState.ACTIVE) return false
         }
 
@@ -423,7 +425,7 @@ class DungeonInstance(
         if (event.isCancelled) return false
 
         // 2. 执行状态变更
-        synchronized(this) {
+        synchronized(stateLock) {
             if (state != DungeonState.ACTIVE) return false
             state = DungeonState.COMPLETED
         }
@@ -461,7 +463,7 @@ class DungeonInstance(
      * @return 是否成功触发失败逻辑
      */
     fun fail(): Boolean {
-        synchronized(this) {
+        synchronized(stateLock) {
             if (state != DungeonState.ACTIVE && state != DungeonState.PREPARING) return false
         }
 
@@ -471,7 +473,7 @@ class DungeonInstance(
         if (event.isCancelled) return false
 
         // 2. 执行状态变更
-        synchronized(this) {
+        synchronized(stateLock) {
             if (state != DungeonState.ACTIVE && state != DungeonState.PREPARING) return false
             state = DungeonState.FAILED
         }

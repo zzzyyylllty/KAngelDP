@@ -121,15 +121,22 @@ object GraalJsUtil {
         return executeScript(script, vars)
 
     }
+    private const val MAX_SOURCE_CACHE_SIZE = 5000
+    private const val CACHE_EVICT_BATCH = 500
+
     fun cachedEval(script: String, vars: Map<String, Any?>): Any? {
 
         val hash = script.generateHash()
         val source = gjsScriptCache.getOrPut(hash) {
+            if (gjsScriptCache.size >= MAX_SOURCE_CACHE_SIZE) {
+                // 分批淘汰 10% 条目，而非全量清空，减少缓存雪崩
+                val keys = gjsScriptCache.keys.take(CACHE_EVICT_BATCH)
+                keys.forEach { gjsScriptCache.remove(it) }
+            }
             compile(script)
         }
 
         if (source == null) {
-            // 编译失败
             severeL("GraalJsCompileFailed", script)
             return null
         }

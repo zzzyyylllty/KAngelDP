@@ -36,6 +36,9 @@ object ObstacleManager {
     // 自动关闭定时任务: worldName -> configId -> PlatformExecutor.PlatformTask，用于取消提前手动开启的障碍物
     private val autoCloseTasks = ConcurrentHashMap<String, MutableMap<String, PlatformExecutor.PlatformTask>>()
 
+    // 延迟激活定时任务: worldName -> configId -> PlatformExecutor.PlatformTask，用于取消提前手动开启的障碍物
+    private val delayedActivateTasks = ConcurrentHashMap<String, MutableMap<String, PlatformExecutor.PlatformTask>>()
+
     /**
      * 准备障碍物（预先保存方块状态、预留位置）
      */
@@ -93,10 +96,18 @@ object ObstacleManager {
                 .getOrPut(worldKey) { ConcurrentHashMap.newKeySet() }
                 .add(obstacleInstance)
 
-            submit(delay = (config.openDelaySeconds * 20).toLong()) {
-                if (instance.state != DungeonState.ACTIVE) return@submit
+            val task = submit(delay = (config.openDelaySeconds * 20).toLong()) {
+                if (instance.state != DungeonState.ACTIVE) {
+                    // dungeon已结束，清理PREPARING状态的obstacle记录
+                    activeObstacles[worldKey]?.remove(obstacleInstance)
+                    return@submit
+                }
+                delayedActivateTasks[worldKey]?.remove(config.id)
                 doActivateBlocks(instance, config, obstacleInstance)
             }
+            delayedActivateTasks
+                .getOrPut(worldKey) { ConcurrentHashMap() }
+                .put(config.id, task)
             return true
         }
 
@@ -191,8 +202,9 @@ object ObstacleManager {
         event.call()
         if (event.isCancelled) return false
 
-        // 取消自动关闭定时器
+        // 取消自动关闭定时器和延迟激活定时器
         autoCloseTasks[instance.worldName]?.remove(config.id)?.cancel()
+        delayedActivateTasks[instance.worldName]?.remove(config.id)?.cancel()
 
         try {
             for ((gateId, gate) in config.obstacles) {
@@ -243,6 +255,7 @@ object ObstacleManager {
         activeObstacles.remove(worldName)
         openedObstacles.remove(worldName)
         autoCloseTasks.remove(worldName)?.values?.forEach { it.cancel() }
+        delayedActivateTasks.remove(worldName)?.values?.forEach { it.cancel() }
         KAngelDungeon.blockRegenMap.remove(worldName)
     }
 

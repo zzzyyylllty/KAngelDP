@@ -10,6 +10,7 @@ import io.github.zzzyyylllty.kangeldungeon.data.DungeonTemplate
 import io.github.zzzyyylllty.kangeldungeon.logger.infoL
 import io.github.zzzyyylllty.kangeldungeon.logger.severeL
 import io.github.zzzyyylllty.kangeldungeon.logger.warningL
+import io.github.zzzyyylllty.kangeldungeon.util.deleteDirectory
 import io.github.zzzyyylllty.kangeldungeon.util.devLog
 import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper.getWorldName
 import io.github.zzzyyylllty.kangeldungeon.util.monster.MonsterManager
@@ -469,38 +470,6 @@ object DungeonHelper {
                 submitAsync { deleteTask() }
             }
         }
-    }
-
-    /**
-     * 递归删除目录（含重试机制，解决 Windows 文件句柄延迟释放问题）
-     */
-    private fun deleteDirectory(directory: File, maxRetries: Int = 5): Boolean {
-        if (!directory.exists()) return true
-
-        if (directory.isDirectory) {
-            directory.listFiles()?.forEach { file ->
-                deleteDirectory(file, maxRetries)
-            }
-        }
-
-        var retries = 0
-        while (retries < maxRetries) {
-            if (directory.delete()) return true
-            retries++
-            if (retries < maxRetries) {
-                try {
-                    Thread.sleep(200)
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    break
-                }
-            }
-        }
-
-        if (directory.exists()) {
-            warningL("WarningDeleteDirectoryFailed", directory.name)
-        }
-        return !directory.exists()
     }
 
     /**
