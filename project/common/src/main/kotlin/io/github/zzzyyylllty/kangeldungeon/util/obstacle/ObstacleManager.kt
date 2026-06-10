@@ -107,7 +107,8 @@ object ObstacleManager {
             }
             delayedActivateTasks
                 .getOrPut(worldKey) { ConcurrentHashMap() }
-                .put(config.id, task)
+                .remove(config.id)?.cancel()
+            delayedActivateTasks[worldKey]!![config.id] = task
             return true
         }
 
@@ -158,7 +159,8 @@ object ObstacleManager {
                 }
                 autoCloseTasks
                     .getOrPut(worldKey) { ConcurrentHashMap() }
-                    .put(config.id, task)
+                    .remove(config.id)?.cancel()
+                autoCloseTasks[worldKey]!![config.id] = task
             }
 
             return true

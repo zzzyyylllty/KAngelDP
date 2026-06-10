@@ -347,7 +347,11 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     }
 
     fun reloadCustomConfig(async: Boolean = true, onComplete: ((List<io.github.zzzyyylllty.kangeldungeon.data.load.ReloadDiagnostics.Issue>) -> Unit)? = null) {
-        // 在调用线程同步标记重载中，防止 submit 异步块启动前 tick 读取不一致数据
+        // 防止并发重载
+        if (isReloading) {
+            onComplete?.let { submit { it(emptyList()) } }
+            return
+        }
         isReloading = true
         submit(async) {
             // 清除上次的诊断数据

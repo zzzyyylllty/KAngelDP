@@ -303,11 +303,7 @@ object MonsterManager {
     fun onMobKill(entity: LivingEntity) {
         val entityId = entity.uniqueId
         val worldName = entityOwnerMap.remove(entityId) ?: return
-        val configId = entityToConfigMap.remove(entityId) ?: run {
-            // clearWorld 可能已先移除了 entityToConfigMap 条目，此时重新补查 worldName 避免跟踪泄漏
-            entityOwnerMap.entries.removeIf { it.key == entityId }
-            return
-        }
+        val configId = entityToConfigMap.remove(entityId) ?: return
         val instanceUuid = KAngelDungeon.worldInstanceIndex[worldName] ?: return
         val instance = KAngelDungeon.dungeonInstances[instanceUuid] ?: return
 
