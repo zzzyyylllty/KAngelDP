@@ -567,3 +567,12 @@ DebugActiveMonstersHeader: "<gradient:gold:yellow>===== 地牢 {0} 活跃怪物 
 DebugActiveMonsterEntry: " <gray>-</gray> <gold>{0}</gold> | <gray>已生成: {1} | 全部击杀: {2}</gray>"
 DebugActiveMonsterMob: "   <gray>{0}. {1} @({2}, {3}, {4})</gray>"
 DebugNoActiveMonsters: "<yellow>该地牢实例没有活跃怪物</yellow>"
+
+# === Join Requirements ===
+WarningJoinRequirementLevel: "<red>你的等级不足以进入此地牢 (需要 {0} 级)</red>"
+WarningJoinRequirementPermission: "<red>你没有进入此地牢所需的权限</red>"
+WarningJoinRequirementItem: "<red>你需要 {0} x{1} 才能进入此地牢</red>"
+WarningJoinRequirementMoney: "<red>你需要 {0} 金币才能进入此地牢</red>"
+
+# === Max Deaths ===
+MaxDeathsReached: "<red>已达到最大死亡次数，你被移出地牢</red>"

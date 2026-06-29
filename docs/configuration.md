@@ -224,6 +224,93 @@ agent:
   onComplete: |-                   # 通关时
   onFail: |-                       # 失败时
   # 自定义触发器：onWaveStart 等任意名称均可
+
+# ===== 加入要求 =====
+# 可选，玩家进入地牢前的条件检查，不满足则阻止创建地牢
+join-requirements:
+  min-level: 0                         # 最低等级，0=不检查
+  required-permissions: []             # 所需权限节点列表
+  required-items: []                   # 所需物品列表
+    # - material: DIAMOND              # 物品材质
+    #   amount: 1                      # 数量
+    #   take: false                    # 是否消耗
+  required-money: 0.0                  # 所需金币（需要 Vault 经济插件）
+
+# ===== 视觉效果 =====
+# 可选，覆盖地牢生命周期阶段的默认标题/音效
+# 留空则使用默认行为
+visual:
+  start-title: ""                      # 开始标题（MiniMessage）
+  start-subtitle: ""                   # 开始副标题
+  start-sound:                         # 开始音效
+    sound: ""                          # 音效名称
+    volume: 1.0
+    pitch: 1.0
+  complete-title: ""                   # 通关标题
+  complete-subtitle: ""
+  complete-sound:                      # 通关音效
+    sound: ""
+    volume: 1.0
+    pitch: 1.0
+  fail-title: ""                       # 失败标题
+  fail-subtitle: ""
+  fail-sound:                          # 失败音效
+    sound: ""
+    volume: 1.0
+    pitch: 1.0
+
+# ===== 环境控制 =====
+# 可选，地牢开始时自动应用的世界环境设置
+environment:
+  allow-fly: false                     # 是否允许飞行
+  game-mode: ADVENTURE                 # 游戏模式
+  fly-speed: 0.1                       # 飞行速度（0~1）
+  walk-speed: 0.2                      # 行走速度（0~1）
+  potion-effects: []                   # 药水效果列表
+    # - type: SPEED                    # 药水效果类型
+    #   amplifier: 0                   # 等级（0=I）
+    #   duration: 30                   # 持续时间（秒）
+  world-border:                        # 世界边界
+    size: 256.0                        # 边长
+    center-x: 0.0
+    center-z: 0.0
+  time-lock: 6000                      # 锁定世界时间（tick），null=不锁定
+  weather-lock: CLEAR                  # 锁定天气（CLEAR/RAIN/THUNDER），null=不锁定
+
+# ===== 通关奖励 =====
+# 可选，通关/失败时的奖励和命令执行
+rewards:
+  complete-commands: []                # 通关时执行的命令（%player% 占位符）
+  fail-commands: []                    # 失败时执行的命令
+  complete-items: []                   # 通关时给予的物品
+    # - material: DIAMOND
+    #   amount: 1
+  complete-money: 0.0                  # 通关金币（需要 Vault）
+  complete-experience: 0               # 通关经验值
+  per-player: true                     # true=每人执行，false=仅执行一次
+
+# ===== 杂项 =====
+misc:
+  join-while-running: false            # 是否允许地牢进行中时加入
+  max-deaths: -1                       # 最大死亡次数（按玩家），-1=无限
+  kick-on-max-deaths: SPECTATE         # 超过最大死亡时的操作（SPECTATE/LOBBY/KICK）
+  title-join: ""                       # 玩家中途加入时的标题
+  title-leave: ""                      # 玩家离开时的标题
+
+# ===== Breakable Blocks / 可破坏方块 =====
+# 白名单模式：只有在此列表中的方块可以被破坏
+# 留空则使用 gameplay.general.blockBreak 的原有规则
+# 非空时，方块必须同时满足 blockBreak 规则和此列表才能被破坏
+breakable-blocks:
+  - OAK_PLANKS
+  - GLASS
+
+# ===== Player Blocks / 玩家放置的方块 =====
+# 控制玩家在 dungeon 世界中的方块放置行为
+player-blocks:
+  track-placed: false       # 是否追踪玩家放置的方块（追踪后可在地牢结束时恢复）
+  clear-on-end: false       # 地牢结束时是否恢复被替换的方块
+  max-blocks-per-player: -1 # 每名玩家最大放置数量，-1=无限
 ```
 
 ---
@@ -576,6 +663,42 @@ kangeldp plan stop
     instance.setMeta("script_done", true);
 ```
 
+### 自建 .js 文件脚本（推荐）
+
+除了 YAML 格式外，你也可以直接放置 `*.js` 文件到 `dungeon/<name>/script/` 目录下：
+
+```
+dungeon/<name>/
+└── script/
+    ├── sample.yml                 # YAML 格式（旧方式）
+    └── my_script.js               # JS 文件（新方式，文件名即脚本名）
+```
+
+`.js` 文件的全部内容即为脚本的 `onRun` 代码，文件名（不含扩展名）作为脚本名称。
+
+示例 `my_script.js`：
+```javascript
+// 直接编写 JS 代码，无需 YAML 包装
+instance.sendMessageToAllPlayers("<yellow>自定义 JS 脚本执行！</yellow>");
+var count = instance.getMetaAsInt("my_script_count") || 0;
+instance.setMeta("my_script_count", count + 1);
+```
+
+### 全局 JS 脚本
+
+放置在 `plugins/KAngelDungeon/scripts/` 目录下的 `.js` 文件将作为全局脚本加载，
+所有地牢都可以通过 `instance.runScript("脚本名")` 调用：
+
+```
+plugins/KAngelDungeon/
+└── scripts/
+    ├── utils.js                   # 全局工具函数
+    └── common.js                  # 通用逻辑
+```
+
+全局脚本的优先级低于地牢专属脚本（`dungeon/<name>/script/`），
+当两者同名时，地牢专属脚本优先。
+
 ### JS 调用
 
 ```js
@@ -587,6 +710,93 @@ instance.runAllScripts();
 
 ```
 kangeldp script <脚本名>
+```
+
+---
+
+## PlaceholderAPI 变量
+
+当服务器安装 PlaceholderAPI 后，KAngelDungeon 会注册 `%kangeldungeon_xxx%` 占位符。
+所有占位符需要玩家位于地牢中才会返回值，否则返回空字符串。
+
+### 实例状态
+
+| 占位符 | 说明 | 示例值 |
+|--------|------|--------|
+| `%kangeldungeon_in_dungeon%` | 是否在地牢中 | yes / no |
+| `%kangeldungeon_state%` | 地牢状态 | PREPARING / ACTIVE / COMPLETED / FAILED |
+| `%kangeldungeon_template%` | 地牢模板名称 | sample |
+| `%kangeldungeon_display%` | 地牢显示名称 | 示例地牢 |
+| `%kangeldungeon_world%` | 地牢世界名称 | KDP_sample_xxxx |
+| `%kangeldungeon_leader%` | 队长名称 | Notch |
+| `%kangeldungeon_difficulty%` | 难度 ID（未选择则为空） | hard |
+
+### 玩家统计
+
+| 占位符 | 说明 |
+|--------|------|
+| `%kangeldungeon_players%` | 地牢中玩家总数 |
+| `%kangeldungeon_alive%` | 存活玩家数 |
+| `%kangeldungeon_dead%` | 死亡玩家数 |
+| `%kangeldungeon_online_names%` | 在线玩家名称列表（逗号分隔） |
+| `%kangeldungeon_dead_names%` | 死亡玩家名称列表（逗号分隔） |
+| `%kangeldungeon_player_status%` | 当前玩家状态：alive / dead / offline / not_in_dungeon |
+| `%kangeldungeon_player_deaths%` | 当前玩家的死亡次数 |
+
+### 时间相关
+
+| 占位符 | 说明 | 示例 |
+|--------|------|------|
+| `%kangeldungeon_elapsed%` | 已用时间（秒） | 125 |
+| `%kangeldungeon_elapsed_formatted%` | 已用时间（MM:SS） | 02:05 |
+| `%kangeldungeon_remaining%` | 剩余时间（秒，无限制则为空） | 475 |
+| `%kangeldungeon_remaining_formatted%` | 剩余时间（MM:SS） | 07:55 |
+
+### 状态判断（返回 yes / no）
+
+| 占位符 | 判断条件 |
+|--------|----------|
+| `%kangeldungeon_is_active%` | 地牢是否进行中 |
+| `%kangeldungeon_is_preparing%` | 地牢是否准备中 |
+| `%kangeldungeon_is_completed%` | 地牢是否已通关 |
+| `%kangeldungeon_is_failed%` | 地牢是否已失败 |
+| `%kangeldungeon_is_finished%` | 地牢是否已结束（完成或失败） |
+| `%kangeldungeon_pvp%` | 地牢是否允许 PVP |
+
+### 模板配置
+
+| 占位符 | 说明 |
+|--------|------|
+| `%kangeldungeon_time_limit%` | 时间限制（秒） |
+| `%kangeldungeon_prep_time%` | 准备时间（秒） |
+| `%kangeldungeon_min_players%` | 最小玩家数 |
+| `%kangeldungeon_max_players%` | 最大玩家数 |
+| `%kangeldungeon_min_level%` | 最低等级要求 |
+
+### 统计数据
+
+| 占位符 | 说明 |
+|--------|------|
+| `%kangeldungeon_mob_kills%` | 总怪物击杀数 |
+| `%kangeldungeon_boss_kills%` | 总 Boss 击杀数 |
+| `%kangeldungeon_total_deaths%` | 总死亡次数 |
+| `%kangeldungeon_dungeon_starts%` | 地牢开始次数 |
+| `%kangeldungeon_dungeon_completes%` | 地牢通关次数 |
+| `%kangeldungeon_dungeon_fails%` | 地牢失败次数 |
+| `%kangeldungeon_monster_spawns%` | 怪物生成次数 |
+| `%kangeldungeon_kit_opens%` | Kit 开启次数 |
+| `%kangeldungeon_region_enters%` | 区域进入次数 |
+| `%kangeldungeon_obstacle_activations%` | 障碍物激活次数 |
+
+### 通用元数据
+
+通过 `%kangeldungeon_meta_<key>%` 可访问地牢实例中的任意元数据值。
+key 中的点号 `.` 保留原样：
+
+```
+%kangeldungeon_meta_wave%                → instance.meta["wave"]
+%kangeldungeon_meta_player.dead.Notch%   → instance.meta["player.dead.Notch"]
+%kangeldungeon_meta_mob.kill.zombie%     → instance.meta["mob.kill.zombie"]
 ```
 
 ---

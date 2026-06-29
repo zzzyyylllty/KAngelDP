@@ -482,7 +482,6 @@ object DebugCommand {
             sender.sendStringAsComponent(sender.asLangText("DebugMemoryEntry", sender.asLangText("DebugMemoryLabelBlockRegen"), blockRegenMap.size.toString()))
             sender.sendStringAsComponent(sender.asLangText("DebugMemoryEntry", sender.asLangText("DebugMemoryLabelGjsCache"), KAngelDungeon.gjsScriptCache.size.toString()))
             sender.sendStringAsComponent(sender.asLangText("DebugMemoryEntry", sender.asLangText("DebugMemoryLabelKetherCache"), KAngelDungeon.ketherScriptCache.size.toString()))
-            sender.sendStringAsComponent(sender.asLangText("DebugMemoryEntry", sender.asLangText("DebugMemoryLabelJsCache"), KAngelDungeon.jsScriptCache.size.toString()))
         }
     }
 

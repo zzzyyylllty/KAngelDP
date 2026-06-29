@@ -181,3 +181,74 @@ agent:
 
     // [Sound / 音效] Play howl at spawn point / 在出生点播放心跳声
     instance.playSoundAt("entity_wolf_howl", 100.0, 64.0, 200.0, 2.0, 1.0);
+
+# ===== Join Requirements / 进入要求 =====
+join-requirements:
+  min-level: 0
+  required-permissions: []
+  required-items: []
+  required-money: 0.0
+
+# ===== Visual Effects / 视觉特效 =====
+# 在地牢生命周期各阶段显示自定义标题和播放音效
+# 留空或省略则使用默认行为
+visual:
+  start-title: ""
+  start-subtitle: ""
+  start-sound:
+    sound: ""
+    volume: 1.0
+    pitch: 1.0
+  complete-title: ""
+  complete-subtitle: ""
+  complete-sound:
+    sound: ""
+    volume: 1.0
+    pitch: 1.0
+  fail-title: ""
+  fail-subtitle: ""
+  fail-sound:
+    sound: ""
+    volume: 1.0
+    pitch: 1.0
+
+# ===== Environment / 环境控制 =====
+# 地牢开始时的世界环境设置
+environment:
+  allow-fly: false
+  game-mode: ADVENTURE
+  fly-speed: 0.1
+  walk-speed: 0.2
+  potion-effects: []
+  world-border:
+    size: 256.0
+    center-x: 0.0
+    center-z: 0.0
+  time-lock: 6000
+  weather-lock: CLEAR
+
+# ===== Rewards / 通关奖励 =====
+rewards:
+  complete-commands: []
+  fail-commands: []
+  complete-items: []
+  complete-money: 0.0
+  complete-experience: 0
+  per-player: true
+
+# ===== Misc / 其他设置 =====
+misc:
+  join-while-running: false
+  max-deaths: -1
+  kick-on-max-deaths: SPECTATE
+  title-join: ""
+  title-leave: ""
+
+# ===== Breakable Blocks / 可破坏方块 =====
+breakable-blocks: []                    # 白名单：仅列表中的方块可破坏，留空则使用 blockBreak 规则
+
+# ===== Player Blocks / 玩家放置的方块 =====
+player-blocks:
+  track-placed: false                   # 是否追踪玩家放置的方块
+  clear-on-end: false                   # 地牢结束时是否恢复被替换的方块
+  max-blocks-per-player: -1             # 每名玩家最大放置数量，-1=无限

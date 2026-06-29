@@ -7,6 +7,10 @@ import io.github.zzzyyylllty.kangeldungeon.function.javascript.EventUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.ItemStackUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.PlayerUtil
 import io.github.zzzyyylllty.kangeldungeon.function.javascript.ThreadUtil
+import io.github.zzzyyylllty.kangeldungeon.function.javascript.EntityUtil
+import io.github.zzzyyylllty.kangeldungeon.function.javascript.BlockUtil
+import io.github.zzzyyylllty.kangeldungeon.function.javascript.RandomUtil
+import io.github.zzzyyylllty.kangeldungeon.function.javascript.MathUtil
 import io.github.zzzyyylllty.kangeldungeon.util.dungeon.DungeonHelper
 import io.github.zzzyyylllty.kangeldungeon.util.kit.KitManager
 import io.github.zzzyyylllty.kangeldungeon.util.monster.MonsterManager
@@ -64,6 +68,10 @@ fun registerExternalData() {
             "EventUtil" to EventUtil,
             "ThreadUtil" to ThreadUtil,
             "PlayerUtil" to PlayerUtil,
+            "EntityUtil" to EntityUtil,
+            "BlockUtil" to BlockUtil,
+            "RandomUtil" to RandomUtil,
+            "MathUtil" to MathUtil,
             "DungeonAPI" to KAngelDungeonAPI::class.java,
             "Math" to Math::class.java,
             "System" to System::class.java,

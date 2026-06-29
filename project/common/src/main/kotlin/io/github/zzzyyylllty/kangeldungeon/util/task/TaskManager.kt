@@ -5,6 +5,12 @@ import io.github.zzzyyylllty.kangeldungeon.data.*
 import io.github.zzzyyylllty.kangeldungeon.data.defaultData
 import io.github.zzzyyylllty.kangeldungeon.logger.warningL
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
+import org.bukkit.event.block.BlockBreakEvent
+import org.bukkit.event.block.BlockPlaceEvent
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.EntityDamageEvent
+import org.bukkit.entity.Player
+import taboolib.common.platform.event.SubscribeEvent
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -37,20 +43,23 @@ object TaskManager {
 
         val currentTick = java.lang.System.currentTimeMillis() / 50L
 
-        for ((id, config) in configs) {
+        // 按 priority 升序排序（低优先级先执行，高优先级后执行）
+        val sorted = configs.entries.sortedBy { (_, config) -> config.priority }
+
+        for ((id, config) in sorted) {
             if (!config.trigger.equals(trigger, ignoreCase = true)) continue
             if (!matchesFilters(config, context)) continue
 
             // 原子性地检查并声明执行权限（count + cooldown）
             if (config.maxExecutions > 0 || config.cooldown > 0) {
-                val countMap = executionCounts.getOrPut(instance.uuid) { ConcurrentHashMap() }
+                val countMap = executionCounts.computeIfAbsent(instance.uuid) { ConcurrentHashMap() }
                 synchronized(countMap) {
                     if (config.maxExecutions > 0) {
                         val current = countMap.getOrDefault(id, 0)
                         if (current >= config.maxExecutions) continue
                     }
                     if (config.cooldown > 0) {
-                        val lastTickMap = lastExecuted.getOrPut(instance.uuid) { ConcurrentHashMap() }
+                        val lastTickMap = lastExecuted.computeIfAbsent(instance.uuid) { ConcurrentHashMap() }
                         val last = lastTickMap.getOrDefault(id, 0L)
                         if (currentTick - last < config.cooldown) continue
                     }
@@ -59,7 +68,7 @@ object TaskManager {
                         countMap.merge(id, 1) { old, new -> old + new }
                     }
                     if (config.cooldown > 0) {
-                        lastExecuted.getOrPut(instance.uuid) { ConcurrentHashMap() }[id] = currentTick
+                        lastExecuted.computeIfAbsent(instance.uuid) { ConcurrentHashMap() }[id] = currentTick
                     }
                 }
             }
@@ -102,6 +111,14 @@ object TaskManager {
     }
 
     /**
+     * 清理所有地牢的任务跟踪数据（reload 时调用）
+     */
+    fun clearAll() {
+        executionCounts.clear()
+        lastExecuted.clear()
+    }
+
+    /**
      * 检查任务的过滤条件是否匹配
      */
     private fun matchesFilters(config: TaskConfig, context: Map<String, Any?>): Boolean {
@@ -134,5 +151,79 @@ object TaskManager {
             warningL("WarningTaskExecutionFailed", taskId, instance.templateName, e.message ?: "Unknown error")
             e.printStackTrace()
         }
+    }
+}
+
+/**
+ * 任务触发器监听器 - 监听 Bukkit 事件并触发对应的地牢任务
+ */
+object TaskTriggerListener {
+
+    @SubscribeEvent
+    fun onBlockBreak(event: BlockBreakEvent) {
+        val player = event.player
+        val instanceUuid = KAngelDungeon.playerToInstanceIndex[player.uniqueId] ?: return
+        val instance = KAngelDungeon.dungeonInstances[instanceUuid] ?: return
+        if (instance.state != DungeonState.ACTIVE) return
+
+        TaskManager.triggerTasks(instance, "BLOCK_BREAK", mapOf(
+            "playerName" to player.name,
+            "player" to player,
+            "block" to event.block,
+            "blockType" to event.block.type.name,
+            "location" to event.block.location
+        ))
+    }
+
+    @SubscribeEvent
+    fun onBlockPlace(event: BlockPlaceEvent) {
+        val player = event.player
+        val instanceUuid = KAngelDungeon.playerToInstanceIndex[player.uniqueId] ?: return
+        val instance = KAngelDungeon.dungeonInstances[instanceUuid] ?: return
+        if (instance.state != DungeonState.ACTIVE) return
+
+        TaskManager.triggerTasks(instance, "BLOCK_PLACE", mapOf(
+            "playerName" to player.name,
+            "player" to player,
+            "block" to event.block,
+            "blockType" to event.block.type.name,
+            "location" to event.block.location
+        ))
+    }
+
+    @SubscribeEvent
+    fun onDamageTaken(event: EntityDamageEvent) {
+        val entity = event.entity
+        if (entity !is Player) return
+        val instanceUuid = KAngelDungeon.playerToInstanceIndex[entity.uniqueId] ?: return
+        val instance = KAngelDungeon.dungeonInstances[instanceUuid] ?: return
+        if (instance.state != DungeonState.ACTIVE) return
+
+        TaskManager.triggerTasks(instance, "DAMAGE_TAKEN", mapOf(
+            "playerName" to entity.name,
+            "player" to entity,
+            "damage" to event.finalDamage,
+            "damageCause" to event.cause.name,
+            "location" to entity.location
+        ))
+    }
+
+    @SubscribeEvent
+    fun onDamageDealt(event: EntityDamageByEntityEvent) {
+        val damager = event.damager
+        if (damager !is Player) return
+        val instanceUuid = KAngelDungeon.playerToInstanceIndex[damager.uniqueId] ?: return
+        val instance = KAngelDungeon.dungeonInstances[instanceUuid] ?: return
+        if (instance.state != DungeonState.ACTIVE) return
+
+        TaskManager.triggerTasks(instance, "DAMAGE_DEALT", mapOf(
+            "playerName" to damager.name,
+            "player" to damager,
+            "damage" to event.finalDamage,
+            "damageCause" to event.cause.name,
+            "targetType" to event.entity.type.name,
+            "target" to event.entity,
+            "location" to damager.location
+        ))
     }
 }

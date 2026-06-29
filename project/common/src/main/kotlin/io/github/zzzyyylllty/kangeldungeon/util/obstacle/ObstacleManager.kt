@@ -179,7 +179,12 @@ object ObstacleManager {
         val worldKey = instance.worldName
         val opened = openedObstacles.getOrPut(worldKey) { ConcurrentHashMap.newKeySet() }
         if (!opened.add(config.id)) return false
-        val result = openObstacleInternal(instance, config)
+        val result = try {
+            openObstacleInternal(instance, config)
+        } catch (e: Exception) {
+            opened.remove(config.id)
+            throw e
+        }
         if (!result) opened.remove(config.id)
         return result
     }
@@ -216,11 +221,13 @@ object ObstacleManager {
             // 播放关闭动画（障碍物打开 = 栅栏消失 = 播放closingAnimation）
             playAnimation(world, config.closingAnimation, config)
 
-            // 更新障碍物实例状态（使用 filter+removeAll 避免 ConcurrentHashMap-backed Set 的 removeIf 线程安全问题）
+            // 更新障碍物实例状态（加锁保证 filter+removeAll 原子性）
             activeObstacles[instance.worldName]?.let { obstacles ->
-                val toRemove = obstacles.filter { it.config.id == config.id }
-                if (toRemove.isNotEmpty()) {
-                    obstacles.removeAll(toRemove.toSet())
+                synchronized(obstacles) {
+                    val toRemove = obstacles.filter { it.config.id == config.id }
+                    if (toRemove.isNotEmpty()) {
+                        obstacles.removeAll(toRemove.toSet())
+                    }
                 }
             }
 
@@ -241,18 +248,16 @@ object ObstacleManager {
     fun restoreBlocks(instance: DungeonInstance) {
         val worldName = instance.worldName
         val saved = savedBlockStates[worldName] ?: return
-        val world = Bukkit.getWorld(worldName) ?: return
+        val world = Bukkit.getWorld(worldName)
 
-        for ((key, blockData) in saved) {
-            val parts = key.split(",")
-            if (parts.size == 3) {
-                val x = parts[0].toInt()
-                val y = parts[1].toInt()
-                val z = parts[2].toInt()
-                world.setBlockData(x, y, z, blockData)
+        if (world != null) {
+            for ((key, blockData) in saved) {
+                val pos = parseBlockPos(key) ?: continue
+                world.setBlockData(pos.first, pos.second, pos.third, blockData)
             }
         }
 
+        // 无论世界是否已卸载，都清理内存中的追踪数据
         savedBlockStates.remove(worldName)
         activeObstacles.remove(worldName)
         openedObstacles.remove(worldName)
@@ -354,7 +359,9 @@ object ObstacleManager {
                                 Location(world, pos.x + 0.5, pos.y + 0.5, pos.z + 0.5),
                                 effect.count, 0.3, 0.3, 0.3, 0.01
                             )
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) {
+                            warningL("WarningObstacleParticleFailed", "animation", e.message ?: "Unknown error")
+                        }
                     }
                 }
             }
@@ -452,7 +459,9 @@ object ObstacleManager {
                         )
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                warningL("WarningObstacleParticleFailed", animation.particle, e.message ?: "Unknown error")
+            }
         }
 
         // 播放音效
@@ -466,7 +475,9 @@ object ObstacleManager {
                         sound, animation.volume.toFloat(), animation.pitch.toFloat()
                     )
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                warningL("WarningObstacleSoundFailed", animation.sound, e.message ?: "Unknown error")
+            }
         }
     }
 
@@ -496,6 +507,19 @@ object ObstacleManager {
         } catch (e: Exception) {
             warningL("WarningObstacleAgentFailed", config.id, e.message ?: "Unknown error")
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * 将 "x,y,z" 格式的坐标字符串解析为 Triple
+     */
+    private fun parseBlockPos(key: String): Triple<Int, Int, Int>? {
+        val parts = key.split(",")
+        if (parts.size != 3) return null
+        return try {
+            Triple(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+        } catch (_: NumberFormatException) {
+            null
         }
     }
 }

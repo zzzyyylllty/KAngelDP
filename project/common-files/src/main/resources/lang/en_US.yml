@@ -566,6 +566,15 @@ DebugKitRewardChance: "   <gray>{0}. [{1}] {2} x{3} (chance: {4}%)</gray>"
 DebugKitRewardMessage: "     <gray>Msg: <reset>{0}</reset></gray>"
 DebugNoKitForDungeon: "<yellow>Dungeon [{0}] has no kit configs.</yellow>"
 
+# === Join Requirements ===
+WarningJoinRequirementLevel: "<red>Your level is too low to enter this dungeon (need level {0})</red>"
+WarningJoinRequirementPermission: "<red>You don't have the required permission to enter this dungeon</red>"
+WarningJoinRequirementItem: "<red>You need {0} x{1} to enter this dungeon</red>"
+WarningJoinRequirementMoney: "<red>You need {0} coins to enter this dungeon</red>"
+
+# === Max Deaths ===
+MaxDeathsReached: "<red>You have reached the maximum death count and have been removed from the dungeon</red>"
+
 # === Debug: Active Plans ===
 DebugActivePlansHeader: "<gradient:gold:yellow>===== Dungeon {0} Active Plans ({1}) =====</gradient>"
 DebugActivePlanEntry: " <gray>-</gray> <gold>{0}</gold> | <gray>Trigger: {1}</gray>"

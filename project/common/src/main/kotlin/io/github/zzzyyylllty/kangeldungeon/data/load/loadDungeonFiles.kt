@@ -32,6 +32,7 @@ fun loadDungeonFiles() {
         releaseResourceFile("dungeon/sample/kit/rewards.yml")
         releaseResourceFile("dungeon/sample/task/sample.yml")
         releaseResourceFile("dungeon/sample/difficulty.yml")
+        releaseResourceFile("dungeon/sample/script/sample.js")
         // releaseResourceFile 同步释放后文件夹已存在，继续加载
     }
     // 确保 schematics 文件夹存在（用于 WorldEdit .schem 文件）
@@ -47,6 +48,9 @@ fun loadDungeonFiles() {
     }
     // 加载全局Kit（所有地牢通用）
     loadGlobalKitFiles()
+
+    // 加载全局 JS 脚本（scripts/ 目录下的 .js 文件）
+    loadGlobalScriptFiles()
 
     for (file in files) {
         // 如果是目录，加载其中的文件
@@ -68,6 +72,12 @@ fun loadDungeonFile(file: File) {
 
     // 检测 script/ 子目录下的文件，作为地牢脚本加载
     if (file.parentFile.name == "script") {
+        // .js 文件直接加载为 JS 脚本（无需 YAML 包装）
+        if (file.name.endsWith(".js", ignoreCase = true)) {
+            val dungeonName = file.parentFile.parentFile.name
+            loadDungeonJsScriptFile(dungeonName, file)
+            return
+        }
         loadDungeonScriptFile(file)
         return
     }
@@ -154,8 +164,6 @@ fun loadDungeonFile(file: File) {
 
 @Suppress("UNCHECKED_CAST")
 fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
-    val c = ConfigUtil
-
     // ===== 解析 display =====
     val display = arg["display"] as? Map<String, Any?> ?: emptyMap()
     val displayName = display["name"] as? String ?: key
@@ -192,6 +200,9 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     val general = gameplay["general"] as? Map<String, Any?> ?: emptyMap()
 
     val timeLimit = (general["timeLimit"] as? Number)?.toDouble() ?: 3600.0
+    if (timeLimit <= 0) {
+        io.github.zzzyyylllty.kangeldungeon.util.devLog("Dungeon '$key' timeLimit=$timeLimit (<=0), timeout disabled")
+    }
     val preparationTime = (general["preparationTime"] as? Number)?.toDouble() ?: 30.0
     val allowRespawn = general["allowRespawn"] as? Boolean ?: false
     val pvpEnabled = general["pvpEnabled"] as? Boolean ?: false
@@ -221,7 +232,7 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
         val mode = try {
             BlockControlMode.valueOf((section["mode"] as? String)?.uppercase() ?: "BLACKLIST")
         } catch (_: IllegalArgumentException) { BlockControlMode.BLACKLIST }
-        val list = (section["list"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+        val list = (section["list"] as? List<*>)?.mapNotNull { it?.toString() }?.toSet() ?: emptySet()
         return BlockControlConfig(mode = mode, list = list)
     }
     val blockPlace = parseBlockControl(general["blockPlace"] as? Map<String, Any?>)
@@ -294,6 +305,136 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
     }
     val agents = if (agentMap.isNotEmpty()) Agents(agentMap) else null
 
+    // ===== 解析 breakable-blocks（可破坏方块白名单） =====
+    val breakableBlocks = (arg["breakable-blocks"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+
+    // ===== 解析 player-blocks（玩家放置方块） =====
+    val pbSection = arg["player-blocks"] as? Map<String, Any?> ?: emptyMap()
+    val playerBlocks = PlayerBlocksConfig(
+        trackPlaced = pbSection["track-placed"] as? Boolean ?: false,
+        clearOnEnd = pbSection["clear-on-end"] as? Boolean ?: false,
+        maxBlocksPerPlayer = (pbSection["max-blocks-per-player"] as? Number)?.toInt() ?: -1
+    )
+
+    // ===== 解析 join-requirements（加入要求） =====
+    val joinReqSection = arg["join-requirements"] as? Map<String, Any?> ?: emptyMap()
+    val joinMinLevel = (joinReqSection["min-level"] as? Number)?.toInt() ?: 0
+    val joinReqPermissions = (joinReqSection["required-permissions"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+    val joinReqMoney = (joinReqSection["required-money"] as? Number)?.toDouble() ?: 0.0
+    val joinReqItems = mutableListOf<RequiredItemConfig>()
+    val reqItemsRaw = joinReqSection["required-items"] as? List<Map<String, Any?>>
+    if (reqItemsRaw != null) {
+        for (itemMap in reqItemsRaw) {
+            val mat = itemMap["material"] as? String ?: continue
+            val amt = (itemMap["amount"] as? Number)?.toInt() ?: 1
+            val take = itemMap["take"] as? Boolean ?: false
+            joinReqItems.add(RequiredItemConfig(material = mat, amount = amt, take = take))
+        }
+    }
+
+    // ===== 解析 visual（视觉效果） =====
+    fun parseSoundOption(section: Any?): SoundOption? {
+        val map = section as? Map<String, Any?> ?: return null
+        return SoundOption(
+            sound = map["sound"] as? String,
+            volume = (map["volume"] as? Number)?.toFloat() ?: 1.0f,
+            pitch = (map["pitch"] as? Number)?.toFloat() ?: 1.0f
+        )
+    }
+    val visualSection = arg["visual"] as? Map<String, Any?> ?: emptyMap()
+    val visualEffects = VisualEffectsConfig(
+        startTitle = visualSection["start-title"] as? String,
+        startSubtitle = visualSection["start-subtitle"] as? String,
+        startSound = parseSoundOption(visualSection["start-sound"]),
+        completeTitle = visualSection["complete-title"] as? String,
+        completeSubtitle = visualSection["complete-subtitle"] as? String,
+        completeSound = parseSoundOption(visualSection["complete-sound"]),
+        failTitle = visualSection["fail-title"] as? String,
+        failSubtitle = visualSection["fail-subtitle"] as? String,
+        failSound = parseSoundOption(visualSection["fail-sound"])
+    )
+
+    // ===== 解析 environment（环境控制） =====
+    val envSection = arg["environment"] as? Map<String, Any?> ?: emptyMap()
+    val envAllowFlight = envSection["allow-fly"] as? Boolean
+    val envGameMode = envSection["game-mode"] as? String
+    val envFlySpeed = (envSection["fly-speed"] as? Number)?.toFloat()
+    val envWalkSpeed = (envSection["walk-speed"] as? Number)?.toFloat()
+    val envTimeLock = (envSection["time-lock"] as? Number)?.toLong()
+    val envWeatherLock = envSection["weather-lock"] as? String
+    val envWbSection = envSection["world-border"] as? Map<String, Any?>
+    val envWorldBorder = if (envWbSection != null) {
+        WorldBorderOption(
+            size = (envWbSection["size"] as? Number)?.toDouble() ?: 256.0,
+            centerX = (envWbSection["center-x"] as? Number)?.toDouble() ?: 0.0,
+            centerZ = (envWbSection["center-z"] as? Number)?.toDouble() ?: 0.0
+        )
+    } else null
+    val envPotionEffects = mutableListOf<PotionEffectOption>()
+    val potionRaw = envSection["potion-effects"] as? List<Map<String, Any?>>
+    if (potionRaw != null) {
+        for (pe in potionRaw) {
+            val type = pe["type"] as? String ?: continue
+            val amp = (pe["amplifier"] as? Number)?.toInt() ?: 0
+            val dur = (pe["duration"] as? Number)?.toInt() ?: 30
+            envPotionEffects.add(PotionEffectOption(type = type, amplifier = amp, duration = dur))
+        }
+    }
+    val environment = EnvironmentConfig(
+        allowFlight = envAllowFlight,
+        gameMode = envGameMode,
+        flySpeed = envFlySpeed,
+        walkSpeed = envWalkSpeed,
+        potionEffects = envPotionEffects,
+        worldBorder = envWorldBorder,
+        timeLock = envTimeLock,
+        weatherLock = envWeatherLock
+    )
+
+    // ===== 解析 rewards（通关奖励） =====
+    val rewardsSection = arg["rewards"] as? Map<String, Any?> ?: emptyMap()
+    val completeCmds = (rewardsSection["complete-commands"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+    val failCmds = (rewardsSection["fail-commands"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+    val completeMoney = (rewardsSection["complete-money"] as? Number)?.toDouble() ?: 0.0
+    val completeExp = (rewardsSection["complete-experience"] as? Number)?.toInt() ?: 0
+    val perPlayer = rewardsSection["per-player"] as? Boolean ?: true
+    val completeItems = mutableListOf<RewardItemOption>()
+    val itemsRaw = rewardsSection["complete-items"] as? List<Map<String, Any?>>
+    if (itemsRaw != null) {
+        for (im in itemsRaw) {
+            val mat = im["material"] as? String ?: continue
+            val amt = (im["amount"] as? Number)?.toInt() ?: 1
+            completeItems.add(RewardItemOption(material = mat, amount = amt))
+        }
+    }
+    val rewardsConfig = RewardsConfig(
+        completeCommands = completeCmds,
+        failCommands = failCmds,
+        completeItems = completeItems,
+        completeMoney = completeMoney,
+        completeExperience = completeExp,
+        perPlayer = perPlayer
+    )
+
+    // ===== 解析 misc（杂项） =====
+    val miscSection = arg["misc"] as? Map<String, Any?> ?: emptyMap()
+    val joinWhileRunning = miscSection["join-while-running"] as? Boolean ?: false
+    val maxDeaths = (miscSection["max-deaths"] as? Number)?.toInt() ?: -1
+    val kickOnMaxDeaths = try {
+        MaxDeathAction.valueOf((miscSection["kick-on-max-deaths"] as? String)?.uppercase() ?: "SPECTATE")
+    } catch (_: IllegalArgumentException) { MaxDeathAction.SPECTATE }
+    val titleJoin = miscSection["title-join"] as? String
+    val titleLeave = miscSection["title-leave"] as? String
+    val reconnectTimeout = (miscSection["reconnect-timeout"] as? Number)?.toInt() ?: 300
+    val miscConfig = MiscConfig(
+        joinWhileRunning = joinWhileRunning,
+        maxDeaths = maxDeaths,
+        kickOnMaxDeaths = kickOnMaxDeaths,
+        titleJoin = titleJoin,
+        titleLeave = titleLeave,
+        reconnectTimeout = reconnectTimeout
+    )
+
     // ===== 创建地牢模板 =====
     val template = DungeonTemplate(
         name = key,
@@ -342,7 +483,19 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
             spawnpoint = spawnpointVector
         ),
         gameRules = gameRules,
-        metaConfig = metaConfig
+        metaConfig = metaConfig,
+        joinRequirements = JoinRequirementsConfig(
+            minLevel = joinMinLevel,
+            requiredPermissions = joinReqPermissions,
+            requiredItems = joinReqItems,
+            requiredMoney = joinReqMoney
+        ),
+        visualEffects = visualEffects,
+        environment = environment,
+        rewardsConfig = rewardsConfig,
+        miscConfig = miscConfig,
+        breakableBlocks = breakableBlocks,
+        playerBlocks = playerBlocks
     )
 
     dungeonTemplates[key] = template
@@ -409,6 +562,62 @@ fun loadDungeonScriptFile(file: File) {
         }
         dungeonScriptMap[scriptName] = script
         devLog("Loaded dungeon script: $dungeonId/$scriptName")
+    }
+}
+
+/**
+ * 加载自建 .js 脚本文件（位于 dungeon/<dungeon-id>/script/ 目录下）
+ * 文件名（不含扩展名）作为脚本名，文件全部内容作为 onRun 代码
+ */
+fun loadDungeonJsScriptFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.script"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val scriptName = file.nameWithoutExtension
+    val content = try {
+        file.readText()
+    } catch (e: Exception) {
+        devLog("Failed to read JS script file: ${file.absolutePath}")
+        return
+    }
+    if (content.isBlank()) {
+        ReloadDiagnostics.warn("ReloadWarnScriptNoop", dungeonName, scriptName)
+        return
+    }
+    val dungeonScriptMap = KAngelDungeon.dungeonScripts.getOrPut(dungeonName) { ConcurrentHashMap() }
+    dungeonScriptMap[scriptName] = DungeonScript(name = scriptName, onRun = content, onPost = null)
+    devLog("Loaded dungeon JS script: $dungeonName/$scriptName")
+}
+
+/**
+ * 加载全局 JS 脚本文件（位于 scripts/ 目录下）
+ * 存储在 KAngelDungeon.globalScripts 中，所有地牢可通过 instance.runScript() 调用
+ */
+fun loadGlobalScriptFiles() {
+    val scriptsFolder = File(getDataFolder(), "scripts")
+    if (!scriptsFolder.exists()) {
+        scriptsFolder.mkdirs()
+        return
+    }
+    val files = scriptsFolder.listFiles() ?: return
+    for (file in files) {
+        if (file.isFile && file.name.endsWith(".js", ignoreCase = true)) {
+            if (!checkRegexMatch(file.name, (config["file-load.script"] ?: ".*").toString())) {
+                devLog("${file.name} not match regex, skipping...")
+                continue
+            }
+            val scriptName = file.nameWithoutExtension
+            val content = try {
+                file.readText()
+            } catch (e: Exception) {
+                devLog("Failed to read global script: ${file.name}")
+                continue
+            }
+            if (content.isBlank()) continue
+            KAngelDungeon.globalScripts[scriptName] = DungeonScript(name = scriptName, onRun = content, onPost = null)
+            devLog("Loaded global JS script: $scriptName")
+        }
     }
 }
 
@@ -657,6 +866,7 @@ fun parseTaskConfig(id: String, data: Map<String, Any?>): TaskConfig? {
         val filters = filtersRaw?.mapValues { (_, v) -> v.toString() } ?: emptyMap()
         val maxExecutions = (data["maxExecutions"] as? Number)?.toInt() ?: -1
         val cooldown = (data["cooldown"] as? Number)?.toLong() ?: 0L
+        val priority = (data["priority"] as? Number)?.toInt() ?: 0
         val agentRaw = data["agent"] as? Map<String, Any?>
         val agent = if (agentRaw != null) {
             TaskAgent(onTrigger = agentRaw["onTrigger"] as? String)
@@ -667,6 +877,7 @@ fun parseTaskConfig(id: String, data: Map<String, Any?>): TaskConfig? {
             filters = filters,
             maxExecutions = maxExecutions,
             cooldown = cooldown,
+            priority = priority,
             agent = agent
         )
     } catch (e: Exception) {

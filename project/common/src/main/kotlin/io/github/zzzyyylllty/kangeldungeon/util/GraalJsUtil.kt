@@ -60,11 +60,18 @@ object GraalJsUtil {
     private val contextsLock = Any()
     private const val MAX_CONTEXTS = 50
 
+    /** 插件正在关闭中，禁止创建新 Context */
+    @Volatile
+    private var isShuttingDown = false
+
     /** 获取或创建当前线程的 Context，自动检测 eviction 后的过期 context */
     private fun getContext(): Context {
         val existing = contextThreadLocal.get()
-        if (existing != null && allContexts.contains(existing)) {
+        if (existing != null && allContexts.contains(existing) && !isShuttingDown) {
             return existing
+        }
+        if (isShuttingDown) {
+            throw IllegalStateException("GraalJS is shutting down")
         }
         // context 为 null 或已被 eviction 关闭 → 创建新实例
         val newCtx = newGraalContext()
@@ -123,17 +130,24 @@ object GraalJsUtil {
     }
     private const val MAX_SOURCE_CACHE_SIZE = 5000
     private const val CACHE_EVICT_BATCH = 500
+    private val cacheLock = Any()
 
     fun cachedEval(script: String, vars: Map<String, Any?>): Any? {
 
         val hash = script.generateHash()
-        val source = gjsScriptCache.getOrPut(hash) {
-            if (gjsScriptCache.size >= MAX_SOURCE_CACHE_SIZE) {
-                // 分批淘汰 10% 条目，而非全量清空，减少缓存雪崩
-                val keys = gjsScriptCache.keys.take(CACHE_EVICT_BATCH)
-                keys.forEach { gjsScriptCache.remove(it) }
+
+        // 原子性检查并编译缓存，避免并发重复编译
+        val source = gjsScriptCache.computeIfAbsent(hash) { compile(script) }
+
+        // 加锁淘汰，防止多线程同时进入导致过度淘汰
+        if (gjsScriptCache.size >= MAX_SOURCE_CACHE_SIZE) {
+            synchronized(cacheLock) {
+                if (gjsScriptCache.size >= MAX_SOURCE_CACHE_SIZE) {
+                    val excess = gjsScriptCache.size - MAX_SOURCE_CACHE_SIZE + CACHE_EVICT_BATCH
+                    val keys = gjsScriptCache.keys.take(excess.coerceAtLeast(CACHE_EVICT_BATCH))
+                    keys.forEach { gjsScriptCache.remove(it) }
+                }
             }
-            compile(script)
         }
 
         if (source == null) {
@@ -204,6 +218,8 @@ object GraalJsUtil {
      * 关闭所有线程的 GraalVM Context，供插件卸载时调用
      */
     fun closeCurrentContext() {
+        // 先设置关闭标志，阻止并发 getContext() 获取/创建 Context
+        isShuttingDown = true
         contextThreadLocal.get()?.close()
         contextThreadLocal.remove()
         // 清理其他线程创建的 Context（加锁防止并发创建）
@@ -213,6 +229,7 @@ object GraalJsUtil {
             }
             allContexts.clear()
         }
+        // 不关闭全局 Engine，仅释放 Context，Engine 在 reload 后可复用
     }
 
     private fun createScriptSource(script: String, cached: Boolean = true): Source {

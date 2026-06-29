@@ -41,7 +41,6 @@ import java.io.File
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import javax.script.CompiledScript
 import kotlin.jvm.Volatile
 
 
@@ -69,6 +68,8 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     val playerToInstanceIndex = ConcurrentHashMap<UUID, UUID>()
     val dungeonTemplates = ConcurrentHashMap<String, DungeonTemplate>()
     val dungeonScripts = ConcurrentHashMap<String, ConcurrentHashMap<String, DungeonScript>>()
+    /** 全局 JS 脚本（scripts/ 目录下的 .js 文件），所有地牢通用 */
+    val globalScripts = ConcurrentHashMap<String, DungeonScript>()
     // Per-dungeon configs: dungeonName -> (configId -> config)
     val dungeonObstacleConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, ObstacleConfig>>()
     val dungeonMonsterConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, MonsterConfig>>()
@@ -85,6 +86,10 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     val monsterConfigs = ConcurrentHashMap<String, MonsterConfig>()
     val kitConfigs = ConcurrentHashMap<String, KitConfig>()
     val blockRegenMap = ConcurrentHashMap<String, MutableSet<UUID>>()
+    /** 玩家放置方块追踪: worldName -> ("x,y,z" -> originalBlockData) */
+    val playerPlacedBlocks = ConcurrentHashMap<String, MutableMap<String, String>>()
+    /** 玩家放置方块计数: "world:player" -> count */
+    val playerPlacedBlockCount = ConcurrentHashMap<String, Int>()
 
     val dateTimeFormatter: DateTimeFormatter by lazy { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss") }
     @Volatile
@@ -97,7 +102,6 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     /** 被封禁的玩家 (lowercase name -> reason) */
     val blacklistedPlayers = ConcurrentHashMap<String, String>()
     val ketherScriptCache by lazy { ConcurrentHashMap<String, KetherShell.Cache>() }
-    val jsScriptCache by lazy { ConcurrentHashMap<String, CompiledScript>() }
 
     // Tick任务引用，用于生命周期管理和清理
     private var tickTask: PlatformExecutor.PlatformTask? = null
@@ -156,6 +160,14 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
             chemdahClass.getMethod("register").invoke(null)
         } catch (_: Throwable) {
             // Chemdah 未安装或挂载失败，静默跳过
+        }
+
+        // 尝试注册 PlaceholderAPI 扩展（软依赖）
+        try {
+            val papiHook = Class.forName("io.github.zzzyyylllty.kangeldungeon.util.papi.PapiHook")
+            papiHook.getMethod("register").invoke(null)
+        } catch (_: Throwable) {
+            // PlaceholderAPI 未安装，静默跳过
         }
     }
 
@@ -260,6 +272,11 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                         // 怪物组 tick（自动重生等）
                         MonsterManager.tickDungeonMonsters(instance)
 
+                        // 环境时间锁定（每 tick 维持）
+                        dungeonTemplates[instance.templateName]?.environment?.timeLock?.let { tl ->
+                            instance.setWorldTime(tl)
+                        }
+
                         val template = dungeonTemplates[instance.templateName]
                         if (template != null) {
                             // 超时检查：优先触发
@@ -357,12 +374,14 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
             // 清除上次的诊断数据
             io.github.zzzyyylllty.kangeldungeon.data.load.ReloadDiagnostics.clear()
 
+            // 清理任务执行计数，防止 reload 后旧计数影响新配置的 maxExecutions
+            io.github.zzzyyylllty.kangeldungeon.util.task.TaskManager.clearAll()
+
             try {
                 config.reload()
                 devMode = config.getBoolean("debug", false)
 
                 ketherScriptCache.clear()
-                jsScriptCache.clear()
                 gjsScriptCache.clear()
 
                 // 在 async 块内检查活跃实例，避免调用线程和异步线程间的竞态
@@ -375,12 +394,14 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                 if (!hasActiveInstances) {
                     dungeonTemplates.clear()
                     dungeonScripts.clear()
+                    globalScripts.clear()
                     dungeonObstacleConfigs.clear()
                     dungeonMonsterConfigs.clear()
                     dungeonInteractConfigs.clear()
                     dungeonPlanConfigs.clear()
                     dungeonRegionConfigs.clear()
                     dungeonDifficultyConfigs.clear()
+                    dungeonTaskConfigs.clear()
                     obstacleConfigs.clear()
                     monsterConfigs.clear()
                     dungeonKitConfigs.clear()

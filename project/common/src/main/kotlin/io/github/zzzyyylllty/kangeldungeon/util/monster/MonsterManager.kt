@@ -19,6 +19,7 @@ import org.bukkit.entity.Player
 import org.bukkit.event.entity.EntityDeathEvent
 import org.bukkit.event.entity.EntityRemoveEvent
 import taboolib.common.platform.event.SubscribeEvent
+import taboolib.common.platform.service.PlatformExecutor
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -33,6 +34,9 @@ object MonsterManager {
     private val entityOwnerMap = ConcurrentHashMap<UUID, String>()
     // 实体UUID到configId的反向索引，用于O(1)击杀查找组
     private val entityToConfigMap = ConcurrentHashMap<UUID, String>()
+
+    // 未完成的交错生成任务: worldName -> List<task>，用于世界卸载时取消
+    private val pendingStaggeredTasks = ConcurrentHashMap<String, MutableList<PlatformExecutor.PlatformTask>>()
 
     /**
      * 生成配置中所有的怪物
@@ -103,8 +107,10 @@ object MonsterManager {
                 entityOwnerMap[it] = worldKey
                 entityToConfigMap[it] = config.id
             }
-            // 更新 world→instance 反向索引（使用统一的 KAngelDungeon.worldInstanceIndex）
-            KAngelDungeon.worldInstanceIndex[worldKey] = instance.uuid
+            // 更新 world→instance 反向索引，写入前确认实例仍在活跃列表中（防止竞态：清理与生成并发）
+            if (KAngelDungeon.dungeonInstances.containsKey(instance.uuid)) {
+                KAngelDungeon.worldInstanceIndex[worldKey] = instance.uuid
+            }
 
             val groupMap = activeMonsters.getOrPut(worldKey) { ConcurrentHashMap() }
             val mobInstance = MonsterInstance(
@@ -183,13 +189,16 @@ object MonsterManager {
                 if (entity != null) spawned.add(entity)
             } else {
                 val delay = i * interval
-                taboolib.common.platform.function.submit(delay = delay) {
+                val task = taboolib.common.platform.function.submit(delay = delay) {
                     if (Bukkit.getWorld(worldKey) == null) return@submit
+                    // 检查世界/怪物组是否已被清理（clearWorld 可能已经取消了此任务）
+                    if (activeMonsters[worldKey]?.get(configId) == null) return@submit
                     val entity = spawnMob(world, loc, entry.mob, entry.level) ?: return@submit
                     entityOwnerMap[entity.uniqueId] = worldKey
                     entityToConfigMap[entity.uniqueId] = configId
                     activeMonsters[worldKey]?.get(configId)?.spawnedMobs?.add(entity.uniqueId)
                 }
+                pendingStaggeredTasks.getOrPut(worldKey) { mutableListOf() }.add(task)
             }
         }
         return spawned
@@ -338,7 +347,9 @@ object MonsterManager {
                     // MythicMobs 未安装
                 }
                 DungeonMobKillEvent(instance, killer, entity.type.name, entity.customName?.toString() ?: entity.type.name, mobId, mobLevel, entity).call()
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                warningL("WarningMonsterKillEventFailed", entity.type.name, e.message ?: "Unknown error")
+            }
         }
 
         val groupMap = activeMonsters[worldName] ?: return
@@ -386,6 +397,9 @@ object MonsterManager {
      * 清理世界所有怪物追踪数据
      */
     fun clearWorld(worldName: String) {
+        // 取消该世界所有未完成的交错生成任务
+        pendingStaggeredTasks.remove(worldName)?.forEach { it.cancel() }
+
         val removed = activeMonsters.remove(worldName)
         // 清理该世界中所有实体的反向映射
         entityOwnerMap.entries.removeIf { it.value == worldName }
@@ -512,10 +526,32 @@ object MonsterManager {
             (effectiveMax < 0.0 || nearestSq <= effectiveMax * effectiveMax)
     }
 
+    /** 清理周期计数器，每 100 tick 清理一次 stale 实体追踪 */
+    @Volatile
+    private var tickCounter = 0
+
+    /**
+     * 清理 entityOwnerMap / entityToConfigMap 中已不存在的实体条目
+     * 解决 Spigot 下 EntityRemoveEvent 不触发导致的追踪泄漏
+     */
+    private fun cleanStaleEntityTracking() {
+        val staleKeys = entityOwnerMap.keys.filter { uuid -> Bukkit.getEntity(uuid) == null }
+        staleKeys.forEach {
+            entityOwnerMap.remove(it)
+            entityToConfigMap.remove(it)
+        }
+    }
+
     /**
      * 地牢 tick 时调用，处理怪物组激活检测与自动重生
      */
     fun tickDungeonMonsters(instance: DungeonInstance) {
+        // 每 100 tick 清理一次已消失实体的追踪数据，避免 Spigot 下 EntityRemoveEvent 不触发导致的泄漏
+        tickCounter++
+        if (tickCounter % 100 == 0) {
+            cleanStaleEntityTracking()
+        }
+
         val worldKey = instance.worldName
         val groupMap = activeMonsters[worldKey]
         val world = instance.world ?: return

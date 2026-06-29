@@ -1,6 +1,7 @@
 package io.github.zzzyyylllty.kangeldungeon.command
 
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon
+import io.github.zzzyyylllty.kangeldungeon.data.DungeonInstance
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonState
 import io.github.zzzyyylllty.kangeldungeon.logger.sendStringAsComponent
 import io.github.zzzyyylllty.kangeldungeon.team.TeamManager
@@ -166,17 +167,7 @@ object DungeonCommand {
                     .toList()
             }
             execute<CommandSender> { sender, context, argument ->
-                val uuidStr = context["uuid"]
-                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                if (uuid == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                    return@execute
-                }
-                val instance = KAngelDungeon.dungeonInstances[uuid]
-                if (instance == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                    return@execute
-                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                 val success = instance.start()
                 if (success) {
                     sender.sendStringAsComponent(sender.asLangText("DungeonStarted", instance.templateName))
@@ -201,17 +192,7 @@ object DungeonCommand {
                     .toList()
             }
             execute<CommandSender> { sender, context, argument ->
-                val uuidStr = context["uuid"]
-                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                if (uuid == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                    return@execute
-                }
-                val instance = KAngelDungeon.dungeonInstances[uuid]
-                if (instance == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                    return@execute
-                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                 val success = instance.fail()
                 if (success) {
                     sender.sendStringAsComponent(sender.asLangText("DungeonStopped", instance.templateName))
@@ -260,20 +241,10 @@ object DungeonCommand {
                 KAngelDungeon.dungeonInstances.map { it.key.toString() }.toList()
             }
             execute<CommandSender> { sender, context, argument ->
-                val uuidStr = context["uuid"]
-                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                if (uuid == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                    return@execute
-                }
-                val instance = KAngelDungeon.dungeonInstances[uuid]
-                if (instance == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                    return@execute
-                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoHeader"))
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoTemplate", instance.templateName))
-                sender.sendStringAsComponent(sender.asLangText("DungeonInfoUUID", uuid.toString()))
+                sender.sendStringAsComponent(sender.asLangText("DungeonInfoUUID", instance.uuid.toString()))
                 sender.sendStringAsComponent(sender.asLangText("DungeonInfoState", instance.state.name))
                 val diffId = instance.getDifficulty()
                 if (diffId != null) {
@@ -312,17 +283,7 @@ object DungeonCommand {
                     sender.sendStringAsComponent(sender.asLangText("DungeonUnderMaintenance"))
                     return@execute
                 }
-                val uuidStr = context["uuid"]
-                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                if (uuid == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                    return@execute
-                }
-                val instance = KAngelDungeon.dungeonInstances[uuid]
-                if (instance == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                    return@execute
-                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                 val dungeonTemplate = instance.getTemplate()
                 val permission = dungeonTemplate?.requiredPermission
                 if (permission != null && !player.hasPermission(permission)) {
@@ -404,17 +365,7 @@ object DungeonCommand {
                     sender.sendStringAsComponent(sender.asLangText("DungeonUnderMaintenance"))
                     return@execute
                 }
-                val uuidStr = context["uuid"]
-                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                if (uuid == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                    return@execute
-                }
-                val instance = KAngelDungeon.dungeonInstances[uuid]
-                if (instance == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                    return@execute
-                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                 // 检查权限
                 val dungeonTemplate = instance.getTemplate()
                 val permission = dungeonTemplate?.requiredPermission
@@ -450,17 +401,7 @@ object DungeonCommand {
                     .toList()
             }
             execute<CommandSender> { sender, context, argument ->
-                val uuidStr = context["uuid"]
-                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                if (uuid == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                    return@execute
-                }
-                val instance = KAngelDungeon.dungeonInstances[uuid]
-                if (instance == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                    return@execute
-                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                 val success = instance.complete()
                 if (success) {
                     sender.sendStringAsComponent(sender.asLangText("DungeonCompleted", instance.templateName))
@@ -578,17 +519,7 @@ object DungeonCommand {
                         sender.sendStringAsComponent(sender.asLangText("PlayerNotExist"))
                         return@execute
                     }
-                    val uuidStr = context["uuid"]
-                    val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                    if (uuid == null) {
-                        sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                        return@execute
-                    }
-                    val instance = KAngelDungeon.dungeonInstances[uuid]
-                    if (instance == null) {
-                        sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                        return@execute
-                    }
+                    val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                     val template = instance.getTemplate()
                     val permission = template?.requiredPermission
                     if (permission != null && !target.hasPermission(permission)) {
@@ -617,17 +548,7 @@ object DungeonCommand {
                 KAngelDungeon.dungeonInstances.map { it.key.toString() }.toList()
             }
             execute<CommandSender> { sender, context, argument ->
-                val uuidStr = context["uuid"]
-                val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
-                if (uuid == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInvalidUUID", uuidStr))
-                    return@execute
-                }
-                val instance = KAngelDungeon.dungeonInstances[uuid]
-                if (instance == null) {
-                    sender.sendStringAsComponent(sender.asLangText("DungeonInstanceNotFound", uuidStr))
-                    return@execute
-                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
                 sender.sendStringAsComponent(sender.asLangText("DungeonListPlayersHeader", instance.templateName))
                 sender.sendStringAsComponent(sender.asLangText("DungeonListPlayersLeader", instance.getLeaderName() ?: sender.asLangText("ValueUnknown")))
                 for (pUuid in instance.players) {
@@ -645,6 +566,21 @@ object DungeonCommand {
     }
 
     // ==================== 辅助方法 ====================
+
+    /** 解析 UUID 字符串并查找地牢实例，失败时自动发送错误消息 */
+    private fun CommandSender.resolveInstance(uuidStr: String): DungeonInstance? {
+        val uuid = try { java.util.UUID.fromString(uuidStr) } catch (e: Exception) { null }
+        if (uuid == null) {
+            sendStringAsComponent(asLangText("DungeonInvalidUUID", uuidStr))
+            return null
+        }
+        val instance = KAngelDungeon.dungeonInstances[uuid]
+        if (instance == null) {
+            sendStringAsComponent(asLangText("DungeonInstanceNotFound", uuidStr))
+            return null
+        }
+        return instance
+    }
 
     /** 获取模板的默认难度：优先取 "normal"，否则取第一个，没有则返回 null */
     private fun getDefaultDifficulty(templateName: String): String? {

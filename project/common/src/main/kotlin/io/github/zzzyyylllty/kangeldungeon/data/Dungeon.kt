@@ -101,7 +101,29 @@ data class DungeonTemplate(
     val metaConfig: MetaConfig = MetaConfig(),
 
     // 地牢事件代理脚本（在特定生命周期执行）
-    val agents: Agents? = null
+    val agents: Agents? = null,
+
+    // ===== 扩展配置（option.yml 新增） =====
+
+    // 加入地牢要求
+    val joinRequirements: JoinRequirementsConfig = JoinRequirementsConfig(),
+
+    // 视觉效果配置
+    val visualEffects: VisualEffectsConfig = VisualEffectsConfig(),
+
+    // 环境控制配置
+    val environment: EnvironmentConfig = EnvironmentConfig(),
+
+    // 通关奖励配置
+    val rewardsConfig: RewardsConfig = RewardsConfig(),
+
+    // 杂项配置
+    val miscConfig: MiscConfig = MiscConfig(),
+
+    // 可破坏方块白名单（为空则使用 blockBreak 原有规则）
+    val breakableBlocks: List<String> = emptyList(),
+    // 玩家放置方块追踪配置
+    val playerBlocks: PlayerBlocksConfig = PlayerBlocksConfig()
 ) {
     /**
      * 获取解析后的出生点坐标（Vector），兼容 spawnpoint 配置
@@ -168,6 +190,9 @@ class DungeonInstance(
     // 玩家元数据（每个地牢实例独立，不持久化）
     val playerMeta: ConcurrentHashMap<UUID, DungeonMeta> = ConcurrentHashMap(),
 
+    // 玩家掉线时间戳，供重连机制使用
+    val playerDisconnectTimes: ConcurrentHashMap<UUID, Long> = ConcurrentHashMap(),
+
     // 位置信息
     val spawnLocation: Location,
 
@@ -209,6 +234,18 @@ class DungeonInstance(
     }
 
     /**
+     * 非分配版本的在线玩家迭代（避免每次调用创建新 List）
+     */
+    inline fun forEachOnlinePlayer(action: (Player) -> Unit) {
+        for (uuid in players) {
+            val player = Bukkit.getPlayer(uuid)
+            if (player != null && player.isOnline) {
+                action(player)
+            }
+        }
+    }
+
+    /**
      * 获取队长
      */
     fun getLeader(): Player? = Bukkit.getPlayer(leaderUUID)
@@ -220,9 +257,11 @@ class DungeonInstance(
      * @return 是否成功加入。如果事件被取消或状态不允许则返回 false
      */
     fun addPlayer(player: Player): Boolean {
-        // 1. 状态检查
-        if (state != DungeonState.PREPARING && state != DungeonState.ACTIVE) {
-            return false
+        // 1. 状态检查（ACTIVE 状态需要 miscConfig.joinWhileRunning 允许）
+        if (state != DungeonState.PREPARING) {
+            if (state != DungeonState.ACTIVE) return false
+            val tmplCheck = getTemplate()
+            if (tmplCheck == null || !tmplCheck.miscConfig.joinWhileRunning) return false
         }
 
         // 2. 检查玩家是否已在其他活跃地牢中（O(1) 反向索引）
@@ -254,6 +293,12 @@ class DungeonInstance(
                 "playerName" to player.name,
                 "player" to player
             ))
+            // 显示加入标题（miscConfig.titleJoin）
+            getTemplate()?.miscConfig?.titleJoin?.let { title ->
+                if (title.isNotBlank()) {
+                    player.sendTitle(title, "", 10, 60, 20)
+                }
+            }
         }
 
         return added
@@ -300,8 +345,16 @@ class DungeonInstance(
             KAngelDungeon.playerToInstanceIndex.remove(player.uniqueId, uuid)
             // 3.5 清理玩家元数据
             clearPlayerMeta(player)
+            // 3.6 取消待处理的自动复活定时器
+            io.github.zzzyyylllty.kangeldungeon.event.DungeonDeathHandler.cancelRespawnTask(player.uniqueId)
             // 4. 从死亡名单中清除
             deadPlayers.remove(player.uniqueId)
+            // 4.5 显示离开标题（miscConfig.titleLeave）
+            getTemplate()?.miscConfig?.titleLeave?.let { title ->
+                if (title.isNotBlank()) {
+                    player.sendTitle(title, "", 10, 40, 20)
+                }
+            }
             // 5. 传送玩家回到进入地牢前的位置
             try {
                 val prev = DungeonHelper.playerPreviousLocations.remove(player.uniqueId)
@@ -355,16 +408,16 @@ class DungeonInstance(
                 warningL("WarningDungeonAlreadyStarted", templateName, uuid)
                 return false
             }
-        }
 
-        // 2. 触发 Pre 事件 (可取消)
-        val event = DungeonStartPreEvent(this)
-        event.call()
-        if (event.isCancelled) return false
+            // 2. 触发 Pre 事件 (可取消)
+            val event = DungeonStartPreEvent(this)
+            event.call()
+            if (event.isCancelled) return false
 
-        // 3. 执行状态变更
-        synchronized(stateLock) {
+            // 防止并发 fail()/complete() 在 event 分发期间改变了状态
             if (state != DungeonState.PREPARING) return false
+
+            // 3. 执行状态变更
             state = DungeonState.ACTIVE
         }
         startedAt = System.currentTimeMillis()
@@ -384,6 +437,27 @@ class DungeonInstance(
             }
         }
 
+        // 5.5 应用环境配置
+        if (template != null) {
+            val env = template.environment
+            env.allowFlight?.let { setAllPlayersAllowFlight(it) }
+            env.gameMode?.let { setAllPlayersGameMode(it) }
+            env.flySpeed?.let { setAllPlayersFlySpeed(it) }
+            env.walkSpeed?.let { setAllPlayersWalkSpeed(it) }
+            env.worldBorder?.let { wb -> setWorldBorder(wb.centerX, wb.centerZ, wb.size) }
+            env.timeLock?.let { setWorldTime(it) }
+            env.weatherLock?.let {
+                when (it.uppercase()) {
+                    "CLEAR" -> { setWorldStorm(false); setWorldThundering(false) }
+                    "RAIN" -> { setWorldStorm(true); setWorldThundering(false) }
+                    "THUNDER" -> { setWorldStorm(true); setWorldThundering(true) }
+                }
+            }
+            env.potionEffects.forEach { pe ->
+                applyPotionEffectToAllPlayers(pe.type, pe.duration, pe.amplifier)
+            }
+        }
+
         // 6. 执行 onStart 代理脚本
         runAgentSafe("onStart", mapOf("instance" to this, "template" to getTemplate()), null)
 
@@ -397,12 +471,18 @@ class DungeonInstance(
         stopAllPlans()
         startPlansForTrigger("BEGIN")
 
-        // 8. 发送开始通知
-        sendTitleToAllPlayers(
-            io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.console.asLangText("DungeonStartTitle"),
-            io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.console.asLangText("DungeonStartSubtitle"),
-            10, 60, 20
-        )
+        // 8. 发送开始通知（支持 visual config 覆盖）
+        val visEffects = template?.visualEffects
+        if (visEffects?.startTitle != null) {
+            sendTitleToAllPlayers(visEffects.startTitle, visEffects.startSubtitle ?: "", 10, 60, 20)
+            visEffects.startSound?.let { s -> s.sound?.let { sound -> broadcastSound(sound, s.volume, s.pitch) } }
+        } else {
+            sendTitleToAllPlayers(
+                io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.console.asLangText("DungeonStartTitle"),
+                io.github.zzzyyylllty.kangeldungeon.KAngelDungeon.console.asLangText("DungeonStartSubtitle"),
+                10, 60, 20
+            )
+        }
 
         // 9. 触发 Post 事件 (不可取消)
         DungeonStartPostEvent(this).call()
@@ -417,16 +497,16 @@ class DungeonInstance(
     fun complete(): Boolean {
         synchronized(stateLock) {
             if (state != DungeonState.ACTIVE) return false
-        }
 
-        // 1. 触发 Pre 事件 (可取消)
-        val event = DungeonCompletePreEvent(this)
-        event.call()
-        if (event.isCancelled) return false
+            // 1. 触发 Pre 事件 (可取消)
+            val event = DungeonCompletePreEvent(this)
+            event.call()
+            if (event.isCancelled) return false
 
-        // 2. 执行状态变更
-        synchronized(stateLock) {
+            // 防止并发 fail() 在 event 分发期间改变了状态
             if (state != DungeonState.ACTIVE) return false
+
+            // 2. 执行状态变更
             state = DungeonState.COMPLETED
         }
         completedAt = System.currentTimeMillis()
@@ -436,6 +516,10 @@ class DungeonInstance(
 
         // 3b. 执行难度 onComplete 代理脚本
         runDifficultyAgent("onComplete", mapOf("instance" to this, "template" to getTemplate()))
+
+        // 3c. 通关视觉效果（支持 visual config 覆盖）
+        val tmpl = getTemplate()
+        applyEndVisualEffects(tmpl?.visualEffects?.completeTitle, tmpl?.visualEffects?.completeSubtitle, tmpl?.visualEffects?.completeSound)
 
         // 触发 DUNGEON_COMPLETE 任务
         TaskManager.triggerTasks(this, "DUNGEON_COMPLETE")
@@ -449,32 +533,39 @@ class DungeonInstance(
         meta.add("dungeon.complete", 1)
 
         // 6. 为每个在线玩家触发单人完成事件（供 Chemdah 任务系统使用）
-        for (uuid in players) {
-            val player = Bukkit.getPlayer(uuid)
-            if (player != null && player.isOnline) {
-                try { DungeonPlayerCompleteEvent(this, player).call() } catch (_: Exception) { }
-            }
+        firePerPlayerEvent("DungeonPlayerCompleteEvent") { DungeonPlayerCompleteEvent(this, it) }
+
+        // 7. 执行通关奖励
+        val rewards = tmpl?.rewardsConfig ?: RewardsConfig()
+        val completeTargets = getOnlinePlayers()
+        val completeRewardTargets = if (rewards.perPlayer) completeTargets else listOf(completeTargets.firstOrNull()).filterNotNull()
+        dispatchRewardCommands(rewards.completeCommands, rewards.perPlayer)
+        for (ri in rewards.completeItems) {
+            val mat = try { org.bukkit.Material.valueOf(ri.material.uppercase()) } catch (_: Exception) { continue }
+            completeRewardTargets.forEach { it.inventory.addItem(org.bukkit.inventory.ItemStack(mat, ri.amount)) }
         }
+        if (rewards.completeExperience > 0) completeRewardTargets.forEach { it.giveExp(rewards.completeExperience) }
+
         return true
     }
 
     /**
-     * 地牢失败 (例如玩家全灭或超时)
+     * 失败地牢
      * @return 是否成功触发失败逻辑
      */
     fun fail(): Boolean {
         synchronized(stateLock) {
             if (state != DungeonState.ACTIVE && state != DungeonState.PREPARING) return false
-        }
 
-        // 1. 触发 Pre 事件 (可取消)
-        val event = DungeonFailPreEvent(this)
-        event.call()
-        if (event.isCancelled) return false
+            // 1. 触发 Pre 事件 (可取消)
+            val event = DungeonFailPreEvent(this)
+            event.call()
+            if (event.isCancelled) return false
 
-        // 2. 执行状态变更
-        synchronized(stateLock) {
+            // 防止并发 start()/complete() 在 event 分发期间改变了状态
             if (state != DungeonState.ACTIVE && state != DungeonState.PREPARING) return false
+
+            // 2. 执行状态变更
             state = DungeonState.FAILED
         }
         completedAt = System.currentTimeMillis()
@@ -484,6 +575,10 @@ class DungeonInstance(
 
         // 3b. 执行难度 onFail 代理脚本
         runDifficultyAgent("onFail", mapOf("instance" to this, "template" to getTemplate()))
+
+        // 3c. 失败视觉效果（支持 visual config 覆盖）
+        val tmplFail = getTemplate()
+        applyEndVisualEffects(tmplFail?.visualEffects?.failTitle, tmplFail?.visualEffects?.failSubtitle, tmplFail?.visualEffects?.failSound)
 
         // 触发 DUNGEON_FAIL 任务
         TaskManager.triggerTasks(this, "DUNGEON_FAIL")
@@ -497,13 +592,55 @@ class DungeonInstance(
         meta.add("dungeon.fail", 1)
 
         // 6. 为每个在线玩家触发单人失败事件（供 Chemdah 任务系统使用）
-        for (uuid in players) {
+        firePerPlayerEvent("DungeonPlayerFailEvent") { DungeonPlayerFailEvent(this, it) }
+
+        // 7. 执行失败奖励命令
+        val failRewards = tmplFail?.rewardsConfig ?: RewardsConfig()
+        dispatchRewardCommands(failRewards.failCommands, failRewards.perPlayer)
+        return true
+    }
+
+    // ==================== complete() / fail() 共享辅助方法 ====================
+
+    /**
+     * 对每个在线玩家触发事件，捕获异常不中断主流程
+     */
+    private inline fun firePerPlayerEvent(eventName: String, crossinline eventFactory: (Player) -> taboolib.platform.type.BukkitProxyEvent) {
+        for (uuid in players.toList()) {
             val player = Bukkit.getPlayer(uuid)
             if (player != null && player.isOnline) {
-                try { DungeonPlayerFailEvent(this, player).call() } catch (_: Exception) { }
+                try { eventFactory(player).call() } catch (e: Exception) {
+                    warningL("WarningEventCallFailed", eventName, e.message ?: "Unknown error")
+                }
             }
         }
-        return true
+    }
+
+    /**
+     * 发放奖励命令（支持 perPlayer 模式）
+     */
+    private fun dispatchRewardCommands(commands: List<String>, perPlayer: Boolean) {
+        if (commands.isEmpty()) return
+        val onlinePlayers = getOnlinePlayers()
+        val targets = if (perPlayer) onlinePlayers else listOf(onlinePlayers.firstOrNull()).filterNotNull()
+        for (cmd in commands) {
+            if (perPlayer) {
+                for (p in targets) Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd.replace("%player%", p.name))
+            } else {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd)
+            }
+        }
+    }
+
+    /**
+     * 应用结束视觉效果（标题/声音），被 complete()/fail() 共享
+     */
+    private fun applyEndVisualEffects(title: String?, subtitle: String?, sound: SoundOption?) {
+        if (title != null) {
+            sendTitleToAllPlayers(title, subtitle ?: "", 10, 80, 20)
+            sound?.let { s -> s.sound?.let { sound -> broadcastSound(sound, s.volume, s.pitch) } }
+            lastEndCountdownRemaining = 0  // 阻止 Tick 循环播放默认标题
+        }
     }
 
     /**
@@ -758,8 +895,8 @@ class DungeonInstance(
      * @return 是否找到并执行了脚本
      */
     fun runScript(scriptName: String): Boolean {
-        val scripts = KAngelDungeon.dungeonScripts[templateName] ?: return false
-        val script = scripts[scriptName] ?: return false
+        val scripts = KAngelDungeon.dungeonScripts[templateName]
+        val script = scripts?.get(scriptName) ?: KAngelDungeon.globalScripts[scriptName] ?: return false
         val data = defaultData + mapOf("instance" to this, "template" to getTemplate(), "scriptName" to scriptName)
 
         script.onRun?.let { GraalJsUtil.cachedEval(it, data) }

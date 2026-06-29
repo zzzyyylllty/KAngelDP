@@ -10,13 +10,17 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
+import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.EntityRegainHealthEvent
 import org.bukkit.event.entity.FoodLevelChangeEvent
 import org.bukkit.event.player.PlayerCommandPreprocessEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerPickupItemEvent
+import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.inventory.ItemStack
 import taboolib.common.platform.event.SubscribeEvent
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 地牢流程控制器 - 监听各种事件以强制执行地牢配置中的限制。
@@ -74,6 +78,33 @@ object DungeonFlowController : Listener {
         if (!isBlockAllowed(event.block.type, config)) {
             event.isCancelled = true
             devLog("Blocked block place: ${event.block.type.name} by ${event.player.name}")
+            return
+        }
+        // 玩家放置方块追踪
+        val pbCfg = template.playerBlocks
+        // maxBlocksPerPlayer 限制（在追踪前检查，不消耗配额）
+        if (pbCfg.maxBlocksPerPlayer >= 0) {
+            val countKey = "${instance.worldName}:${event.player.name}"
+            val currentCount = KAngelDungeon.playerPlacedBlockCount.getOrDefault(countKey, 0)
+            if (currentCount >= pbCfg.maxBlocksPerPlayer) {
+                event.isCancelled = true
+                devLog("Blocked block place (max blocks per player): ${event.player.name}")
+                return
+            }
+        }
+        // 追踪放置的方块（保存原方块数据用于恢复）
+        if (pbCfg.trackPlaced && pbCfg.clearOnEnd) {
+            val worldName = instance.worldName
+            val replacedState = event.blockReplacedState
+            val key = "${event.block.x},${event.block.y},${event.block.z}"
+            KAngelDungeon.playerPlacedBlocks
+                .getOrPut(worldName) { ConcurrentHashMap() }
+                .putIfAbsent(key, replacedState.blockData.asString)
+        }
+        // 递增计数器
+        if (pbCfg.maxBlocksPerPlayer >= 0) {
+            val countKey = "${instance.worldName}:${event.player.name}"
+            KAngelDungeon.playerPlacedBlockCount.merge(countKey, 1, Int::plus)
         }
     }
 
@@ -88,6 +119,14 @@ object DungeonFlowController : Listener {
         if (!isBlockAllowed(event.block.type, config)) {
             event.isCancelled = true
             devLog("Blocked block break: ${event.block.type.name} by ${event.player.name}")
+            return
+        }
+        // breakable-blocks 白名单检查（额外限制层，非空时仅允许列表中的方块）
+        val breakable = template.breakableBlocks
+        if (breakable.isNotEmpty() && event.block.type.name !in breakable) {
+            event.isCancelled = true
+            devLog("Blocked block break (not in breakable-blocks): ${event.block.type.name} by ${event.player.name}")
+            return
         }
     }
 
@@ -165,5 +204,86 @@ object DungeonFlowController : Listener {
         if (!template.vanillaOptions.durability) {
             event.isCancelled = true
         }
+    }
+
+    // ==================== 自然恢复控制 ====================
+
+    @SubscribeEvent
+    fun onEntityRegainHealth(event: EntityRegainHealthEvent) {
+        val entity = event.entity
+        if (entity !is Player) return
+        val instance = getActiveDungeon(entity) ?: return
+        val template = instance.getTemplate() ?: return
+        val hr = template.vanillaOptions.healthRegain
+        if (!hr.isAnyEnabled) return  // all enabled, let vanilla behavior through
+
+        val cancel = when (event.regainReason.name) {
+            "SATIATED", "EATING" -> !hr.food
+            "REGEN" -> !hr.saturation
+            "MAGIC", "MAGIC_REGEN", "MAGIC_HEALING", "HEALING_POTION" -> !hr.potions
+            else -> !hr.other
+        }
+        if (cancel) {
+            event.isCancelled = true
+            devLog("Blocked health regain (${event.regainReason}) for ${entity.name}")
+        }
+    }
+
+    // ==================== PVP 控制 ====================
+
+    @SubscribeEvent
+    fun onEntityDamageByEntity(event: EntityDamageByEntityEvent) {
+        if (event.entity !is Player || event.damager !is Player) return
+        val victim = event.entity as Player
+        val damager = event.damager as Player
+
+        val victimInstance = getActiveDungeon(victim)
+        val damagerInstance = getActiveDungeon(damager)
+
+        // 双方都不在地牢
+        if (victimInstance == null && damagerInstance == null) return
+
+        // 确定地牢实例（双方必须在同一地牢）
+        val instance = when {
+            victimInstance != null && damagerInstance != null -> {
+                if (victimInstance.uuid != damagerInstance.uuid) return  // 不同地牢不处理
+                victimInstance
+            }
+            else -> return  // 一方在地牢一方不在，不处理（让命令过滤等机制处理）
+        }
+
+        val template = instance.getTemplate()
+        if (template != null && !template.pvpEnabled) {
+            event.isCancelled = true
+            devLog("Blocked PVP: ${damager.name} -> ${victim.name} in dungeon ${instance.templateName}")
+        }
+    }
+
+    // ==================== 传送逃逸防护 ====================
+
+    @SubscribeEvent
+    fun onPlayerTeleport(event: PlayerTeleportEvent) {
+        val player = event.player
+        val instance = getActiveDungeon(player) ?: return
+        val to = event.to ?: return
+        val from = event.from ?: return
+
+        // 允许同世界传送（末影珍珠、紫颂果等）
+        if (to.world == from.world) return
+
+        // 允许插件发起的传送（地牢系统自身的传送逻辑）
+        if (event.cause == PlayerTeleportEvent.TeleportCause.PLUGIN) return
+
+        // 阻止跨世界传送逃出地牢
+        event.isCancelled = true
+        devLog("Blocked teleport (${event.cause}) for ${player.name} from dungeon ${instance.templateName}")
+    }
+
+    @SubscribeEvent
+    fun onPlayerPortal(event: org.bukkit.event.player.PlayerPortalEvent) {
+        val player = event.player
+        val instance = getActiveDungeon(player) ?: return
+        event.isCancelled = true
+        devLog("Blocked portal for ${player.name} in dungeon ${instance.templateName}")
     }
 }

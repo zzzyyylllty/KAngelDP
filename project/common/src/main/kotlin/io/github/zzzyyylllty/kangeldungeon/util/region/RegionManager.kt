@@ -6,6 +6,7 @@ import io.github.zzzyyylllty.kangeldungeon.event.RegionEnterEvent
 import io.github.zzzyyylllty.kangeldungeon.event.RegionLeaveEvent
 import io.github.zzzyyylllty.kangeldungeon.logger.warningL
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
+import io.github.zzzyyylllty.kangeldungeon.util.task.TaskManager
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.player.PlayerChangedWorldEvent
@@ -85,7 +86,9 @@ object RegionManager {
             }
         }
 
-        worldTracking[playerUUID] = newRegions
+        // 复用 currentRegions 集合而非替换引用，避免并发读取时看到空集合
+        currentRegions.clear()
+        currentRegions.addAll(newRegions)
     }
 
     private fun fireRegionEnter(instance: DungeonInstance, config: RegionConfig, player: Player) {
@@ -93,6 +96,13 @@ object RegionManager {
             RegionEnterEvent(instance, config, player).call()
             instance.meta.add("region.enter", 1)
             instance.meta.add("region.enter.${config.id}", 1)
+            // 触发 REGION_ENTER 任务
+            TaskManager.triggerTasks(instance, "REGION_ENTER", mapOf(
+                "playerName" to player.name,
+                "player" to player,
+                "regionId" to config.id,
+                "region" to config
+            ))
             config.agent?.onEnter?.let { script ->
                 val data = defaultData + mapOf(
                     "instance" to instance,
@@ -113,6 +123,13 @@ object RegionManager {
             RegionLeaveEvent(instance, config, player).call()
             instance.meta.add("region.leave", 1)
             instance.meta.add("region.leave.${config.id}", 1)
+            // 触发 REGION_LEAVE 任务
+            TaskManager.triggerTasks(instance, "REGION_LEAVE", mapOf(
+                "playerName" to player.name,
+                "player" to player,
+                "regionId" to config.id,
+                "region" to config
+            ))
             config.agent?.onLeave?.let { script ->
                 val data = defaultData + mapOf(
                     "instance" to instance,
