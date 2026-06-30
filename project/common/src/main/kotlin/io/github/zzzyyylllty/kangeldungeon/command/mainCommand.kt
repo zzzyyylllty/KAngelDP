@@ -197,7 +197,7 @@ object KAngelDungeonMainCommand {
 fun CommandComponent.createModernHelper(checkPermissions: Boolean = true) {
     execute<ProxyCommandSender> { sender, context, _ ->
         val command = context.command
-        val builder = StringBuilder("<gradient:yellow:aqua>Usage: /${command.name}<gradient>")
+        val builder = StringBuilder("<gradient:yellow:aqua>Usage: /${command.name}</gradient>")
         var newline = false
 
         fun check(children: List<CommandComponent>): List<CommandComponent> {

@@ -102,6 +102,11 @@ object MonsterManager {
             if (config.healthMultiplier != 1.0 || config.damageMultiplier != 1.0) {
                 spawned.forEach { applyConfigModifiers(it, config) }
             }
+            // 应用难度动态缩放（按玩家数调整怪物属性）
+            val scaling = instance.getTemplate()?.difficultyScaling
+            if (scaling != null && scaling.enabled) {
+                spawned.forEach { applyDynamicScaling(it, instance) }
+            }
 
             entityIds.forEach {
                 entityOwnerMap[it] = worldKey
@@ -257,16 +262,49 @@ object MonsterManager {
      */
     private fun applyConfigModifiers(entity: LivingEntity, config: MonsterConfig) {
         if (config.healthMultiplier != 1.0) {
+            val oldHealth = entity.health
             val baseMax = entity.maxHealth
             val newMax = baseMax * config.healthMultiplier
             entity.maxHealth = newMax
-            entity.health = newMax.coerceAtMost(entity.health * config.healthMultiplier)
+            entity.health = newMax.coerceAtMost(oldHealth * config.healthMultiplier)
         }
         if (config.damageMultiplier != 1.0) {
             val attr = entity.getAttribute(org.bukkit.attribute.Attribute.ATTACK_DAMAGE)
             if (attr != null) {
                 attr.baseValue = attr.baseValue * config.damageMultiplier
             }
+        }
+    }
+
+    /**
+     * 应用难度动态缩放（按 dungeon 玩家人数自动调整怪物属性）
+     * 在 applyConfigModifiers 之后调用，两者叠加
+     */
+    fun applyDynamicScaling(entity: LivingEntity, instance: DungeonInstance) {
+        val template = instance.getTemplate() ?: return
+        val scaling = template.difficultyScaling
+        if (!scaling.enabled) return
+
+        val playerCount = instance.players.size
+        val diff = playerCount - scaling.basePlayers
+
+        if (diff == 0) return
+
+        val healthMult = if (diff > 0) 1.0 + diff * scaling.healthMultiplierPerExtra
+                         else 1.0 - diff.coerceAtLeast(1) * scaling.healthMultiplierPerLess  // diff is negative -> subtract
+        val damageMult = if (diff > 0) 1.0 + diff * scaling.damageMultiplierPerExtra
+                         else 1.0 - diff.coerceAtLeast(1) * scaling.damageMultiplierPerLess
+
+        // 在设置 maxHealth 前缓存当前血量，避免设置 maxHealth 后被裁剪
+        val oldHealth = entity.health
+        val baseMax = entity.maxHealth
+        val newMax = baseMax * healthMult.coerceAtLeast(0.1)
+        entity.maxHealth = newMax
+        entity.health = newMax.coerceAtMost(oldHealth * healthMult.coerceAtLeast(0.1))
+
+        val attr = entity.getAttribute(org.bukkit.attribute.Attribute.ATTACK_DAMAGE)
+        if (attr != null) {
+            attr.baseValue = attr.baseValue * damageMult.coerceAtLeast(0.1)
         }
     }
 
@@ -347,6 +385,7 @@ object MonsterManager {
                     // MythicMobs 未安装
                 }
                 DungeonMobKillEvent(instance, killer, entity.type.name, entity.customName?.toString() ?: entity.type.name, mobId, mobLevel, entity).call()
+                io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.recordMobKill(killer.uniqueId)
             } catch (e: Exception) {
                 warningL("WarningMonsterKillEventFailed", entity.type.name, e.message ?: "Unknown error")
             }
@@ -668,6 +707,11 @@ object MonsterManager {
             // 应用 config 级别的 healthMultiplier / damageMultiplier
             if (config.healthMultiplier != 1.0 || config.damageMultiplier != 1.0) {
                 spawned.forEach { applyConfigModifiers(it, config) }
+            }
+            // 应用难度动态缩放（按玩家数调整怪物属性）
+            val scaling = instance.getTemplate()?.difficultyScaling
+            if (scaling != null && scaling.enabled) {
+                spawned.forEach { applyDynamicScaling(it, instance) }
             }
 
             val entityIds = spawned.map { it.uniqueId }

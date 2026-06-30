@@ -1,5 +1,6 @@
 package io.github.zzzyyylllty.kangeldungeon.function.javascript
 
+import io.github.zzzyyylllty.kangeldungeon.util.devLog
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmUtil
 import io.github.zzzyyylllty.kangeldungeon.util.minimessage.mmLegacySectionUtil
 import net.kyori.adventure.text.Component
@@ -15,6 +16,7 @@ import org.bukkit.potion.PotionEffect
 import org.bukkit.potion.PotionEffectType
 import taboolib.common.platform.function.submit
 import java.time.Duration
+import java.util.concurrent.CompletableFuture
 
 object PlayerUtil {
 
@@ -177,7 +179,11 @@ object PlayerUtil {
     fun takeItem(player: Player, material: String, amount: Int): Boolean {
         val mat = Material.getMaterial(material.uppercase()) ?: return false
         var needed = amount.coerceAtLeast(1)
-        if (!Bukkit.isPrimaryThread()) return false
+        if (!Bukkit.isPrimaryThread()) {
+            val future = CompletableFuture<Boolean>()
+            submit { future.complete(takeItem(player, material, amount)) }
+            return try { future.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { false }
+        }
         val inv = player.inventory
         if (countItem(player, material) < needed) return false
         for (item in inv.contents) {

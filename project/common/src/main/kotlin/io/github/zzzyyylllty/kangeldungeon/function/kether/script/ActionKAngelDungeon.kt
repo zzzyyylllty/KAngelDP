@@ -4,6 +4,7 @@ import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon
 import io.github.zzzyyylllty.kangeldungeon.data.DungeonInstance
 import io.github.zzzyyylllty.kangeldungeon.data.defaultData
 import io.github.zzzyyylllty.kangeldungeon.util.GraalJsUtil
+import io.github.zzzyyylllty.kangeldungeon.util.devLog
 import io.github.zzzyyylllty.kangeldungeon.util.obstacle.ObstacleManager
 import org.bukkit.entity.Player
 import taboolib.module.kether.*
@@ -119,7 +120,9 @@ fun actionKAngelDungeon() = scriptParser {
                         try {
                             val data = defaultData + mapOf("instance" to inst, "template" to inst.getTemplate())
                             GraalJsUtil.cachedEval(code.toString(), data)
-                        } catch (_: Exception) { }
+                        } catch (e: Exception) {
+                            devLog("Kether eval JS failed: ${e.message}")
+                        }
                         future.complete(null)
                     }
                 }
@@ -139,7 +142,9 @@ fun actionKAngelDungeon() = scriptParser {
                             val data = defaultData + mapOf("instance" to instance, "template" to instance?.getTemplate())
                             s.onRun?.let { GraalJsUtil.cachedEval(it, data) }
                             s.onPost?.let { GraalJsUtil.cachedEval(it, data) }
-                        } catch (_: Exception) { }
+                        } catch (e: Exception) {
+                            devLog("Kether script '${n}' JS eval failed: ${e.message}")
+                        }
                     }
                     future.complete(null)
                 }

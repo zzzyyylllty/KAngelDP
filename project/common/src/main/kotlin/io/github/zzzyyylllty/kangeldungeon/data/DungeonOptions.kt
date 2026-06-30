@@ -255,3 +255,165 @@ data class PlayerBlocksConfig(
     val clearOnEnd: Boolean = false,
     val maxBlocksPerPlayer: Int = -1
 )
+
+// ==================== BossBar 配置（option.yml） ====================
+
+/**
+ * BossBar 颜色
+ */
+enum class BossBarColorOption {
+    BLUE, GREEN, PINK, PURPLE, RED, WHITE, YELLOW
+}
+
+/**
+ * BossBar 样式
+ */
+enum class BossBarStyleOption {
+    SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20
+}
+
+/**
+ * 计时器 BossBar 配置
+ */
+data class TimerBossBarConfig(
+    val enabled: Boolean = false,
+    val color: BossBarColorOption = BossBarColorOption.WHITE,
+    val style: BossBarStyleOption = BossBarStyleOption.SOLID,
+    val title: String = "<gold>⏱ %time% | 存活: %alive%/%total%</gold>",
+    val prepColor: BossBarColorOption = BossBarColorOption.GREEN,
+    val prepStyle: BossBarStyleOption = BossBarStyleOption.SOLID,
+    val prepTitle: String = "<green>准备中: %time%</green>",
+    val completeColor: BossBarColorOption = BossBarColorOption.BLUE,
+    val completeStyle: BossBarStyleOption = BossBarStyleOption.SOLID,
+    val completeTitle: String = "<blue>✔ 通关! %time%</blue>",
+    val failColor: BossBarColorOption = BossBarColorOption.RED,
+    val failStyle: BossBarStyleOption = BossBarStyleOption.SOLID,
+    val failTitle: String = "<red>✘ 失败</red>"
+)
+
+/**
+ * Boss 血量 BossBar 配置（配合怪物组的 boss: true）
+ */
+data class BossHealthBarConfig(
+    val enabled: Boolean = false,
+    val color: BossBarColorOption = BossBarColorOption.RED,
+    val style: BossBarStyleOption = BossBarStyleOption.SOLID,
+    val title: String = "<red>%boss_name% %hp%/%max_hp%</red>"
+)
+
+/**
+ * BossBar 总配置
+ */
+data class BossBarConfig(
+    val timer: TimerBossBarConfig = TimerBossBarConfig(),
+    val bossHealth: BossHealthBarConfig = BossHealthBarConfig()
+)
+
+// ==================== 计分板配置（option.yml） ====================
+
+/**
+ * 单行计分板配置
+ */
+data class ScoreboardLine(
+    val text: String = "",
+    /** 使用 PAPI 变量（如 %player_name%）而非仅内部变量 */
+    val usePapi: Boolean = false
+)
+
+/**
+ * 计分板配置
+ */
+data class ScoreboardConfig(
+    val enabled: Boolean = false,
+    val title: String = "<gold>KAngelDungeon</gold>",
+    val lines: List<ScoreboardLine> = defaultScoreboardLines(),
+    /** 更新间隔（tick），默认 20tick = 1秒 */
+    val updateInterval: Int = 20
+)
+
+fun defaultScoreboardLines(): List<ScoreboardLine> = listOf(
+    ScoreboardLine(""),
+    ScoreboardLine(" <yellow>地牢:</yellow> %dungeon_name%"),
+    ScoreboardLine(" <yellow>状态:</yellow> %state%"),
+    ScoreboardLine(" <yellow>时间:</yellow> %time%"),
+    ScoreboardLine(""),
+    ScoreboardLine(" <yellow>存活:</yellow> %alive%<gray>/</gray>%total%"),
+    ScoreboardLine(" <yellow>击杀:</yellow> %kills%"),
+    ScoreboardLine(""),
+    ScoreboardLine("<gray>play.example.com</gray>")
+)
+
+// ==================== 战利品箱配置（loot/ 目录） ====================
+
+/**
+ * 战利品箱物品项
+ */
+data class LootChestItem(
+    val material: String,
+    val amount: Int = 1,
+    /** 概率 0.0 ~ 1.0，不填或 -1 则表示权重模式 */
+    val chance: Double = -1.0,
+    /** 权重（chance 为 -1 时使用权重随机） */
+    val weight: Int = 1,
+    val displayName: String? = null,
+    val lore: List<String> = emptyList(),
+    /** 附魔列表，格式: "SHARPNESS:3" */
+    val enchantments: List<String> = emptyList(),
+    /** 自定义 NBT JSON */
+    val nbt: String? = null
+)
+
+/**
+ * 战利品箱配置
+ */
+data class LootChestConfig(
+    val id: String,
+    /** 世界坐标列表，支持 "x y z" 格式 */
+    val positions: List<String> = emptyList(),
+    /** 每次地牢是否重新填充 */
+    val refresh: Boolean = true,
+    /** 最少物品数 */
+    val minItems: Int = 1,
+    /** 最多物品数 */
+    val maxItems: Int = 3,
+    /** 物品池 */
+    val items: List<LootChestItem> = emptyList(),
+    /** 关联的 LithiumCarbon frame-crate 配置 ID（不为空时额外生成展示框物资箱） */
+    val frameCrate: String? = null,
+    /** 展示框朝向（如 NORTH, SOUTH, EAST, WEST, UP），默认 UP */
+    val frameCrateFacing: String = "UP"
+)
+
+// ==================== 难度动态缩放配置（option.yml） ====================
+
+/**
+ * 难度动态缩放配置
+ */
+data class DifficultyScalingConfig(
+    val enabled: Boolean = false,
+    /** 基准人数（不缩放） */
+    val basePlayers: Int = 3,
+    /** 额外每人增加的生命倍率 */
+    val healthMultiplierPerExtra: Double = 0.2,
+    /** 额外每人增加的伤害倍率 */
+    val damageMultiplierPerExtra: Double = 0.1,
+    /** 少每人降低的生命倍率 */
+    val healthMultiplierPerLess: Double = 0.15,
+    /** 少每人降低的伤害倍率 */
+    val damageMultiplierPerLess: Double = 0.1
+)
+
+// ==================== 地牢聊天配置（config.yml / option.yml） ====================
+
+/**
+ * 地牢聊天配置
+ */
+data class DungeonChatConfig(
+    val enabled: Boolean = false,
+    /** 聊天格式，支持 %player% %message% %dungeon% */
+    val format: String = "<gray>[<red>Dungeon</red>]</gray> <yellow>%player%</yellow><gray>:</gray> %message%",
+    /** 是否自动转发地牢内普通聊天 */
+    val autoRoute: Boolean = true,
+    /** 命令别名 */
+    val commandAlias: String = "dchat"
+)

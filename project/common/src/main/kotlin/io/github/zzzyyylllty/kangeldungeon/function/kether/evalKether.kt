@@ -149,20 +149,24 @@ fun String?.evalKetherString(
     player: CommandSender?,
     vars: Map<String, Any?> = mapOf(),
     sets: List<Pair<String, Any?>> = emptyList(),
-    def: Any = "null",
+    def: Any? = "null",
     cacheId: String? = null
 ): String? {
     if (this.isNullOrBlank()) {
-        return null
+        return def?.toString()
     }
-    return KetherShell.eval(this, ScriptOptions.builder().apply {
-        sender(player ?: console)
-        vars(vars)
-        sets.forEach {
-            set(it.first, it.second)
-        }
-        if (cacheId != null) ketherScriptCache[cacheId]?.let { cache(it) }
-    }.build()).getNow(def).toString()
+    return try {
+        KetherShell.eval(this, ScriptOptions.builder().apply {
+            sender(player ?: console)
+            vars(vars)
+            sets.forEach {
+                set(it.first, it.second)
+            }
+            if (cacheId != null) ketherScriptCache[cacheId]?.let { cache(it) }
+        }.build()).getNow(def)?.toString()
+    } catch (_: Exception) {
+        def?.toString()
+    }
 }
 
 fun String?.evalKetherBoolean(

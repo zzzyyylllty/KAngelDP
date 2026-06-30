@@ -197,8 +197,13 @@ object TargetSelectorHelper {
             SelectorType.ALL -> candidates
             SelectorType.P -> {
                 if (candidates.isEmpty()) return emptyList()
-                val center = instance.getLeader()?.location ?: instance.spawnLocation
-                listOfNotNull(candidates.minByOrNull { it.location.distance(center) })
+                val leaderLoc = instance.getLeader()?.location
+                val center = leaderLoc ?: instance.spawnLocation
+                if (center != null) {
+                    listOfNotNull(candidates.minByOrNull { it.location.distance(center) })
+                } else {
+                    candidates.firstOrNull()?.let { listOf(it) } ?: emptyList()
+                }
             }
             SelectorType.R -> {
                 if (candidates.isEmpty()) return emptyList()

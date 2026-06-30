@@ -21,7 +21,7 @@ fun Any.toBooleanTolerance(): Boolean {
         is String -> this.lowercase() == "true" || this == "1"
         is Double -> this > 0.0
         is Float -> this > 0.0
-        is Byte -> (this == 1.toByte())
+        is Byte -> this > 0
         is Short -> this > 0
         is Long -> this > 0
         else -> this.toString().toBooleanStrictOrNull() ?: false

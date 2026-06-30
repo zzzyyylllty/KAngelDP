@@ -14,11 +14,11 @@ object ConfigUtil {
         return input?.toString()
     }
     fun getInt(input: Any?): Int? {
-        return input?.toString()?.toInt()
+        return input?.toString()?.toIntOrNull()
     }
 
     fun getLong(input: Any?): Long? {
-        return input?.toString()?.toLong()
+        return input?.toString()?.toLongOrNull()
     }
     fun getDeep(input: Any?, location: String): Any? {
         if (input == null || location.isEmpty()) return null
@@ -54,7 +54,7 @@ fun Any?.asListEnhanced() : List<String>? {
         if (string == null) continue
         list.addAll(string.toString().split("\n","<br>", ignoreCase = true))
     }
-    if (!list.isEmpty() && list.last() == "") list.removeLast()
+    while (list.isNotEmpty() && list.last() == "") list.removeLast()
     return list
 }
 

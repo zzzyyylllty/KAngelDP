@@ -52,6 +52,9 @@ fun loadDungeonFiles() {
     // 加载全局 JS 脚本（scripts/ 目录下的 .js 文件）
     loadGlobalScriptFiles()
 
+    // 加载全局战利品箱（loot/ 目录）
+    loadGlobalLootChestFiles()
+
     for (file in files) {
         // 如果是目录，加载其中的文件
         if (file.isDirectory) {
@@ -93,6 +96,14 @@ fun loadDungeonFile(file: File) {
     if (file.parentFile.name == "obstacle") {
         val dungeonName = file.parentFile.parentFile.name
         loadDungeonObstacleFile(dungeonName, file)
+        return
+    }
+
+    // 检测 loot/ 子目录下的文件，作为地牢战利品箱配置加载
+    if (file.parentFile.name == "loot") {
+        if (!file.name.endsWith(".yml", ignoreCase = true) && !file.name.endsWith(".yaml", ignoreCase = true)) return
+        val dungeonName = file.parentFile.parentFile.name
+        loadDungeonLootChestFile(dungeonName, file)
         return
     }
 
@@ -435,6 +446,93 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
         reconnectTimeout = reconnectTimeout
     )
 
+    // ===== 解析 boss-bar（BossBar 配置） =====
+    val bossBarSection = arg["boss-bar"] as? Map<String, Any?> ?: emptyMap()
+    val timerBbSection = bossBarSection["timer"] as? Map<String, Any?> ?: emptyMap()
+    val bossHbSection = bossBarSection["boss-health"] as? Map<String, Any?> ?: emptyMap()
+
+    fun parseBbColor(v: Any?): BossBarColorOption = try {
+        BossBarColorOption.valueOf((v as? String)?.uppercase() ?: "WHITE")
+    } catch (_: Exception) { BossBarColorOption.WHITE }
+    fun parseBbStyle(v: Any?): BossBarStyleOption = try {
+        BossBarStyleOption.valueOf((v as? String)?.uppercase() ?: "SOLID")
+    } catch (_: Exception) { BossBarStyleOption.SOLID }
+
+    val timerBossBar = TimerBossBarConfig(
+        enabled = timerBbSection["enabled"] as? Boolean ?: false,
+        color = parseBbColor(timerBbSection["color"]),
+        style = parseBbStyle(timerBbSection["style"]),
+        title = timerBbSection["title"] as? String ?: "<gold>⏱ %time% | 存活: %alive%/%total%</gold>",
+        prepColor = parseBbColor(timerBbSection["prep-color"]),
+        prepStyle = parseBbStyle(timerBbSection["prep-style"]),
+        prepTitle = timerBbSection["prep-title"] as? String ?: "<green>准备中: %time%</green>",
+        completeColor = parseBbColor(timerBbSection["complete-color"]),
+        completeStyle = parseBbStyle(timerBbSection["complete-style"]),
+        completeTitle = timerBbSection["complete-title"] as? String ?: "<blue>✔ 通关! %time%</blue>",
+        failColor = parseBbColor(timerBbSection["fail-color"]),
+        failStyle = parseBbStyle(timerBbSection["fail-style"]),
+        failTitle = timerBbSection["fail-title"] as? String ?: "<red>✘ 失败</red>"
+    )
+    val bossHealthBar = BossHealthBarConfig(
+        enabled = bossHbSection["enabled"] as? Boolean ?: false,
+        color = parseBbColor(bossHbSection["color"]),
+        style = parseBbStyle(bossHbSection["style"]),
+        title = bossHbSection["title"] as? String ?: "<red>%boss_name% %hp%/%max_hp%</red>"
+    )
+    val bossBarConfig = BossBarConfig(timer = timerBossBar, bossHealth = bossHealthBar)
+
+    // ===== 解析 scoreboard（计分板配置） =====
+    val sbSection = arg["scoreboard"] as? Map<String, Any?> ?: emptyMap()
+    val sbEnabled = sbSection["enabled"] as? Boolean ?: false
+    val sbTitle = sbSection["title"] as? String ?: "<gold>KAngelDungeon</gold>"
+    val sbUpdateInterval = (sbSection["update-interval"] as? Number)?.toInt() ?: 20
+    val sbLines = mutableListOf<ScoreboardLine>()
+    val sbLinesRaw = sbSection["lines"] as? List<*>
+    if (sbLinesRaw != null) {
+        for (item in sbLinesRaw) {
+            when (item) {
+                is String -> sbLines.add(ScoreboardLine(text = item, usePapi = false))
+                is Map<*, *> -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val map = item as Map<String, Any?>
+                    sbLines.add(ScoreboardLine(
+                        text = map["text"] as? String ?: "",
+                        usePapi = map["use-papi"] as? Boolean ?: false
+                    ))
+                }
+                else -> devLog("Ignoring scoreboard line of unexpected type: ${item?.javaClass?.name}")
+            }
+        }
+    } else {
+        sbLines.addAll(defaultScoreboardLines())
+    }
+    val scoreboardConfig = ScoreboardConfig(
+        enabled = sbEnabled,
+        title = sbTitle,
+        lines = sbLines,
+        updateInterval = sbUpdateInterval
+    )
+
+    // ===== 解析 difficulty-scaling（难度动态缩放） =====
+    val dsSection = arg["difficulty-scaling"] as? Map<String, Any?> ?: emptyMap()
+    val difficultyScalingConfig = DifficultyScalingConfig(
+        enabled = dsSection["enabled"] as? Boolean ?: false,
+        basePlayers = (dsSection["base-players"] as? Number)?.toInt() ?: 3,
+        healthMultiplierPerExtra = (dsSection["health-multiplier-per-extra"] as? Number)?.toDouble() ?: 0.2,
+        damageMultiplierPerExtra = (dsSection["damage-multiplier-per-extra"] as? Number)?.toDouble() ?: 0.1,
+        healthMultiplierPerLess = (dsSection["health-multiplier-per-less"] as? Number)?.toDouble() ?: 0.15,
+        damageMultiplierPerLess = (dsSection["damage-multiplier-per-less"] as? Number)?.toDouble() ?: 0.1
+    )
+
+    // ===== 解析 dungeon-chat（地牢聊天） =====
+    val dcSection = arg["dungeon-chat"] as? Map<String, Any?> ?: emptyMap()
+    val dungeonChatConfig = DungeonChatConfig(
+        enabled = dcSection["enabled"] as? Boolean ?: false,
+        format = dcSection["format"] as? String ?: "<gray>[<red>Dungeon</red>]</gray> <yellow>%player%</yellow><gray>:</gray> %message%",
+        autoRoute = dcSection["auto-route"] as? Boolean ?: true,
+        commandAlias = dcSection["command-alias"] as? String ?: "dchat"
+    )
+
     // ===== 创建地牢模板 =====
     val template = DungeonTemplate(
         name = key,
@@ -495,7 +593,11 @@ fun loadDungeon(key: String, arg: Map<String, Any?>, folderName: String) {
         rewardsConfig = rewardsConfig,
         miscConfig = miscConfig,
         breakableBlocks = breakableBlocks,
-        playerBlocks = playerBlocks
+        playerBlocks = playerBlocks,
+        bossBar = bossBarConfig,
+        scoreboard = scoreboardConfig,
+        difficultyScaling = difficultyScalingConfig,
+        dungeonChat = dungeonChatConfig
     )
 
     dungeonTemplates[key] = template
@@ -959,6 +1061,96 @@ fun getDifficultyGlobalMeta(dungeonName: String, difficultyId: String?): Map<Str
     val diffConfig = KAngelDungeon.dungeonDifficultyConfigs[dungeonName]?.get(difficultyId) ?: return emptyMap()
     @Suppress("UNCHECKED_CAST")
     return (diffConfig.meta["global"] as? Map<String, Any?>) ?: emptyMap()
+}
+
+/**
+ * 加载地牢战利品箱配置文件（位于 dungeon/<dungeon-id>/loot/ 目录下）
+ */
+fun loadDungeonLootChestFile(dungeonName: String, file: File) {
+    if (!checkRegexMatch(file.name, (config["file-load.loot"] ?: ".*").toString())) {
+        devLog("${file.name} not match regex, skipping...")
+        return
+    }
+    val map = multiExtensionLoader(file) ?: return
+    val dungeonMap = KAngelDungeon.dungeonLootChestConfigs.getOrPut(dungeonName) { ConcurrentHashMap() }
+    for (entry in map.entries) {
+        val key = entry.key
+        val value = entry.value as? Map<String, Any?> ?: continue
+        val config = parseLootChestConfig(key, value)
+        if (config != null) {
+            dungeonMap[key] = config
+            devLog("Loaded per-dungeon loot chest: $dungeonName/$key")
+        } else {
+            ReloadDiagnostics.warn("ReloadWarnLootChestParse", dungeonName, key)
+        }
+    }
+}
+
+/**
+ * 解析战利品箱配置
+ */
+fun parseLootChestConfig(id: String, data: Map<String, Any?>): LootChestConfig? {
+    try {
+        val positions = (data["positions"] as? List<*>)?.mapNotNull { it?.toString() } ?: return null
+        if (positions.isEmpty()) return null
+        val refresh = data["refresh"] as? Boolean ?: true
+        val minItems = (data["min-items"] as? Number)?.toInt() ?: 1
+        val maxItems = (data["max-items"] as? Number)?.toInt() ?: 3
+        val itemsRaw = data["items"] as? List<*> ?: emptyList<Any>()
+        val items = mutableListOf<LootChestItem>()
+        for (raw in itemsRaw) {
+            val im = raw as? Map<*, *> ?: continue
+            @Suppress("UNCHECKED_CAST")
+            val itemMap = im as Map<String, Any?>
+            val mat = itemMap["material"] as? String ?: continue
+            val amt = (itemMap["amount"] as? Number)?.toInt() ?: 1
+            val chance = (itemMap["chance"] as? Number)?.toDouble() ?: -1.0
+            val weight = (itemMap["weight"] as? Number)?.toInt() ?: 1
+            val displayName = itemMap["display-name"] as? String
+            val lore = (itemMap["lore"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+            val enchantments = (itemMap["enchantments"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+            val nbt = itemMap["nbt"] as? String
+            items.add(LootChestItem(
+                material = mat.uppercase(), amount = amt, chance = chance,
+                weight = weight, displayName = displayName, lore = lore,
+                enchantments = enchantments, nbt = nbt
+            ))
+        }
+        val frameCrate = data["frame-crate"] as? String
+        val frameCrateFacing = (data["frame-crate-facing"] as? String)?.uppercase() ?: "UP"
+        return LootChestConfig(
+            id = id, positions = positions, refresh = refresh,
+            minItems = minItems.coerceAtLeast(1), maxItems = maxItems.coerceAtLeast(minItems),
+            items = items, frameCrate = frameCrate, frameCrateFacing = frameCrateFacing
+        )
+    } catch (e: Exception) {
+        devLog("Failed to parse loot chest config '$id': ${e.message}")
+        return null
+    }
+}
+
+/**
+ * 加载全局战利品箱配置文件（位于 loot/ 目录下，所有地瓜通用）
+ */
+fun loadGlobalLootChestFiles() {
+    val lootFolder = File(getDataFolder(), "loot")
+    if (!lootFolder.exists()) {
+        lootFolder.mkdirs()
+        return
+    }
+    lootFolder.listFiles()?.forEach { file ->
+        if (file.isFile && (file.name.endsWith(".yml") || file.name.endsWith(".yaml"))) {
+            if (!checkRegexMatch(file.name, (config["file-load.loot"] ?: ".*").toString())) return@forEach
+            val map = multiExtensionLoader(file) ?: return@forEach
+            for (entry in map.entries) {
+                val key = entry.key
+                val value = entry.value as? Map<String, Any?> ?: continue
+                val cfg = parseLootChestConfig(key, value) ?: continue
+                KAngelDungeon.lootChestConfigs[key] = cfg
+                devLog("Loaded global loot chest: $key")
+            }
+        }
+    }
 }
 
 private fun parseDeathConfig(section: Map<String, Any?>?): DeathConfig {

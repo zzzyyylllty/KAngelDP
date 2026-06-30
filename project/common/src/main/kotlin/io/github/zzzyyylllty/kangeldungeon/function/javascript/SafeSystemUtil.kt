@@ -21,11 +21,11 @@ open class SafeSystemUtil {
     fun nanoTime(): Long = System.nanoTime()
 
     fun println(message: Any?) {
-        System.out.println(message.toString())
+        System.out.println(message?.toString() ?: "null")
     }
 
     fun printerr(message: Any?) {
-        System.err.println(message.toString())
+        System.err.println(message?.toString() ?: "null")
     }
 
     fun getProperty(key: String): String? = System.getProperty(key)

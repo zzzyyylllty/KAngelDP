@@ -90,6 +90,14 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
     val playerPlacedBlocks = ConcurrentHashMap<String, MutableMap<String, String>>()
     /** 玩家放置方块计数: "world:player" -> count */
     val playerPlacedBlockCount = ConcurrentHashMap<String, Int>()
+    /** 战利品箱配置（全局） */
+    val lootChestConfigs = ConcurrentHashMap<String, LootChestConfig>()
+    /** 战利品箱配置（per-dungeon） */
+    val dungeonLootChestConfigs = ConcurrentHashMap<String, ConcurrentHashMap<String, LootChestConfig>>()
+    /** 旁观者 UUID 集合 */
+    val spectatorTargets = ConcurrentHashMap.newKeySet<UUID>()
+    /** 地牢聊天开关（玩家选择加入/退出） */
+    val dungeonChatOptOut = ConcurrentHashMap.newKeySet<UUID>()
 
     val dateTimeFormatter: DateTimeFormatter by lazy { DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss") }
     @Volatile
@@ -116,7 +124,24 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
 
     override fun getTeamProvider(): TeamProvider? = TeamManager.getProvider()
 
+    override fun getPlayerStats(playerUUID: UUID) = io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.getPlayerStats(playerUUID)
 
+    override fun isSpectating(playerUUID: UUID) = playerUUID in spectatorTargets
+
+    override fun getActiveInstances(): Collection<DungeonInstance> = dungeonInstances.values
+
+    override fun getDungeonTemplate(name: String) = dungeonTemplates[name]
+
+    override fun findPlayerInstance(playerUUID: UUID): DungeonInstance? {
+        val uuid = playerToInstanceIndex[playerUUID] ?: return null
+        return dungeonInstances[uuid]
+    }
+
+    override fun getLootChestConfig(id: String): LootChestConfig? = lootChestConfigs[id]
+        ?: dungeonLootChestConfigs.values.firstOrNull { it.containsKey(id) }?.get(id)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> Map<String, Any?>?.getTyped(key: String): T? = this?.get(key) as? T
 
     override fun onLoad() {
         if (config.getBoolean("database.enable", false)) {
@@ -143,6 +168,9 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
 
         // 初始化队伍系统
         TeamManager.initialize()
+
+        // 初始化玩家统计数据库
+        io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.initialize()
 
         // 启动地牢生命周期Tick（每秒）
         startDungeonTick()
@@ -199,6 +227,9 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
         // 关闭所有线程的 GraalJS Context，释放原生内存
         GraalJsUtil.closeCurrentContext()
 
+        // 关闭玩家统计数据库
+        io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.shutdown()
+
         // 关闭数据库连接池
         try { (dataSource as? AutoCloseable)?.close() } catch (_: Exception) {}
     }
@@ -224,6 +255,11 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                     DungeonState.PREPARING -> {
                         // 触发Tick事件（供外部监听）
                         DungeonTickEvent(instance).call()
+
+                        // BossBar 更新
+                        io.github.zzzyyylllty.kangeldungeon.util.bossbar.BossBarManager.tick(instance)
+                        // 计分板更新
+                        io.github.zzzyyylllty.kangeldungeon.util.scoreboard.ScoreboardManager.tick(instance)
 
                         val template = dungeonTemplates[instance.templateName]
                         if (template != null) {
@@ -268,6 +304,11 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
                     }
                     DungeonState.ACTIVE -> {
                         DungeonTickEvent(instance).call()
+
+                        // BossBar 更新
+                        io.github.zzzyyylllty.kangeldungeon.util.bossbar.BossBarManager.tick(instance)
+                        // 计分板更新
+                        io.github.zzzyyylllty.kangeldungeon.util.scoreboard.ScoreboardManager.tick(instance)
 
                         // 怪物组 tick（自动重生等）
                         MonsterManager.tickDungeonMonsters(instance)
@@ -351,6 +392,10 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
             toRemove.forEach { uuid ->
                 try {
                     dungeonInstances[uuid]?.let { instance ->
+                        // 销毁 BossBar
+                        io.github.zzzyyylllty.kangeldungeon.util.bossbar.BossBarManager.destroyInstanceBars(instance)
+                        // 恢复计分板
+                        io.github.zzzyyylllty.kangeldungeon.util.scoreboard.ScoreboardManager.restoreAllForInstance(instance)
                         instance.stopAllPlans()
                         RegionManager.clearWorld(instance.worldName)
                         DungeonHelper.unloadDungeonWorld(instance)

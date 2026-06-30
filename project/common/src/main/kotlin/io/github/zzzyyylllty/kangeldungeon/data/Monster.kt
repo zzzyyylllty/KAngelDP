@@ -62,10 +62,11 @@ data class MonsterAgent(
 /**
  * Runtime monster group instance tracking state per dungeon
  */
-data class MonsterInstance(
+class MonsterInstance(
     val config: MonsterConfig,
     val dungeonInstance: DungeonInstance,
     val spawnedMobs: MutableSet<UUID> = ConcurrentHashMap.newKeySet(),
+    @Volatile
     var allKilled: Boolean = false,
     // 运行时激活状态（可 JS 动态切换）
     @Volatile

@@ -106,6 +106,24 @@ private fun parsePlaceholder(player: Player?, params: String): String? {
         params == "region_enters" -> instance.meta.getAsInt("region.enter")?.toString() ?: "0"
         params == "obstacle_activations" -> instance.meta.getAsInt("obstacle.activate")?.toString() ?: "0"
 
+        // ===== 持久化玩家统计 =====
+        params.startsWith("stats_") -> {
+            val p = player ?: return ""
+            val subKey = params.removePrefix("stats_")
+            val stats = io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.getPlayerStats(p.uniqueId)
+            when (subKey) {
+                "completions" -> stats.completions.toString()
+                "fails" -> stats.fails.toString()
+                "total_games" -> stats.totalGames.toString()
+                "completion_rate" -> "%.1f%%".format(stats.completionRate * 100)
+                "mob_kills" -> stats.mobKills.toString()
+                "deaths" -> stats.deaths.toString()
+                "time_played" -> stats.timePlayed.toString()
+                "time_played_formatted" -> formatTimePlayed(stats.timePlayed)
+                else -> ""
+            }
+        }
+
         // ===== 玩家相关 =====
         params == "player_status" -> {
             val name = player?.name ?: return ""
@@ -155,4 +173,12 @@ private fun formatRemainingFormatted(instance: DungeonInstance): String {
     val minutes = total / 60
     val seconds = total % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+private fun formatTimePlayed(seconds: Long): String {
+    val hours = seconds / 3600
+    val mins = (seconds % 3600) / 60
+    val secs = seconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(hours, mins, secs)
+    else "%02d:%02d".format(mins, secs)
 }

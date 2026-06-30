@@ -243,11 +243,26 @@ object ObstacleManager {
     }
 
     /**
+     * 清理指定世界的障碍物追踪数据（取消所有定时任务，清理内存）
+     */
+    fun clearWorld(worldName: String) {
+        savedBlockStates.remove(worldName)
+        activeObstacles.remove(worldName)
+        openedObstacles.remove(worldName)
+        autoCloseTasks.remove(worldName)?.values?.forEach { it.cancel() }
+        delayedActivateTasks.remove(worldName)?.values?.forEach { it.cancel() }
+        KAngelDungeon.blockRegenMap.remove(worldName)
+    }
+
+    /**
      * 恢复已保存的方块状态（彻底清理）
      */
     fun restoreBlocks(instance: DungeonInstance) {
         val worldName = instance.worldName
-        val saved = savedBlockStates[worldName] ?: return
+        val saved = savedBlockStates[worldName] ?: run {
+            clearWorld(worldName)
+            return
+        }
         val world = Bukkit.getWorld(worldName)
 
         if (world != null) {
@@ -257,13 +272,7 @@ object ObstacleManager {
             }
         }
 
-        // 无论世界是否已卸载，都清理内存中的追踪数据
-        savedBlockStates.remove(worldName)
-        activeObstacles.remove(worldName)
-        openedObstacles.remove(worldName)
-        autoCloseTasks.remove(worldName)?.values?.forEach { it.cancel() }
-        delayedActivateTasks.remove(worldName)?.values?.forEach { it.cancel() }
-        KAngelDungeon.blockRegenMap.remove(worldName)
+        clearWorld(worldName)
     }
 
     // ==================== 内部方块操作 ====================

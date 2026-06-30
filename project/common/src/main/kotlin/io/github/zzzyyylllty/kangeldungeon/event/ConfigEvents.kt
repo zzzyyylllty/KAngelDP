@@ -1,9 +1,8 @@
 package io.github.zzzyyylllty.kangeldungeon.event
 
-import org.bukkit.event.player.PlayerItemConsumeEvent
 import taboolib.platform.type.BukkitProxyEvent
 
-class kangeldungeonReloadEvent() : BukkitProxyEvent()
+class KAngelDungeonReloadEvent() : BukkitProxyEvent()
 
 /**
  * Modify [defaultData] you can register

@@ -66,12 +66,12 @@ object GraalJsUtil {
 
     /** 获取或创建当前线程的 Context，自动检测 eviction 后的过期 context */
     private fun getContext(): Context {
-        val existing = contextThreadLocal.get()
-        if (existing != null && allContexts.contains(existing) && !isShuttingDown) {
-            return existing
-        }
         if (isShuttingDown) {
             throw IllegalStateException("GraalJS is shutting down")
+        }
+        val existing = contextThreadLocal.get()
+        if (existing != null && allContexts.contains(existing)) {
+            return existing
         }
         // context 为 null 或已被 eviction 关闭 → 创建新实例
         val newCtx = newGraalContext()
@@ -163,6 +163,7 @@ object GraalJsUtil {
     private val reentrantDepth = ThreadLocal.withInitial { 0 }
 
     private fun executeScript(scriptOrSource: Any, vars: Map<String, Any?>): Any? {
+        if (isShuttingDown) return null
         val context = getContext()
         val bindings: Value = context.getBindings(GJS_LANG_ID)
 

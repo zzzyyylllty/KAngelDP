@@ -20,6 +20,7 @@ import org.bukkit.event.player.PlayerPickupItemEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.inventory.ItemStack
 import taboolib.common.platform.event.SubscribeEvent
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -285,5 +286,41 @@ object DungeonFlowController : Listener {
         val instance = getActiveDungeon(player) ?: return
         event.isCancelled = true
         devLog("Blocked portal for ${player.name} in dungeon ${instance.templateName}")
+    }
+
+    // ==================== 地牢聊天自动路由 ====================
+
+    @SubscribeEvent
+    fun onAsyncChat(event: org.bukkit.event.player.AsyncPlayerChatEvent) {
+        val player = event.player
+
+        // 检查玩家是否退出了自动路由
+        if (player.uniqueId in KAngelDungeon.dungeonChatOptOut) return
+
+        val instanceUuid = KAngelDungeon.playerToInstanceIndex[player.uniqueId] ?: return
+        val instance = KAngelDungeon.dungeonInstances[instanceUuid] ?: return
+        val config = instance.getTemplate()?.dungeonChat ?: return
+        if (!config.enabled || !config.autoRoute) return
+
+        // 自动将地牢玩家的普通聊天也转发给同地牢成员
+        // 取消原事件（防止全服广播），我们手动发送给同地牢玩家
+        event.isCancelled = true
+
+        val formatted = config.format
+            .replace("%player%", player.name)
+            .replace("%message%", event.message)
+            .replace("%dungeon%", instance.templateName)
+
+        val component = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize(formatted)
+        // 异步事件中，对 instance.players 做防御性拷贝避免 ConcurrentModificationException
+        val playersSnapshot = synchronized(instance.players) { instance.players.toSet() }
+        for (uuid in playersSnapshot) {
+            val target = org.bukkit.Bukkit.getPlayer(uuid) ?: continue
+            target.sendMessage(component)
+        }
+        // 发送给控制台（替代取消后丢失的日志）
+        org.bukkit.Bukkit.getConsoleSender().sendMessage(
+            net.kyori.adventure.text.Component.text("[DC:${instance.templateName}] ${player.name}: ${event.message}")
+        )
     }
 }

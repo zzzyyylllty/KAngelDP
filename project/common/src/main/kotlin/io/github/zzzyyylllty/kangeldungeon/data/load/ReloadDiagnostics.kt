@@ -11,22 +11,23 @@ object ReloadDiagnostics {
     data class Issue(val severity: Severity, val key: String, val args: List<String> = emptyList())
 
     private val issues = mutableListOf<Issue>()
+    private val lock = Any()
 
     fun error(key: String, vararg args: String) {
-        issues.add(Issue(Severity.ERROR, key, args.toList()))
+        synchronized(lock) { issues.add(Issue(Severity.ERROR, key, args.toList())) }
     }
 
     fun warn(key: String, vararg args: String) {
-        issues.add(Issue(Severity.WARNING, key, args.toList()))
+        synchronized(lock) { issues.add(Issue(Severity.WARNING, key, args.toList())) }
     }
 
-    fun hasIssues(): Boolean = issues.isNotEmpty()
+    fun hasIssues(): Boolean = synchronized(lock) { issues.isNotEmpty() }
 
-    fun collect(): List<Issue> {
+    fun collect(): List<Issue> = synchronized(lock) {
         val snapshot = issues.toList()
         issues.clear()
-        return snapshot
+        snapshot
     }
 
-    fun clear() { issues.clear() }
+    fun clear() { synchronized(lock) { issues.clear() } }
 }

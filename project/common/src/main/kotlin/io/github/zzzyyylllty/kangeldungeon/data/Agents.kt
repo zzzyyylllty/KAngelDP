@@ -37,7 +37,8 @@ import taboolib.common.platform.function.submitAsync
 import javax.script.CompiledScript
 import javax.script.SimpleBindings
 
-var defaultData = LinkedHashMap<String, Any?>()
+@Volatile
+var defaultData = emptyMap<String, Any?>()
 
 /**
  * 供 JS 脚本安全调用的 Bukkit 方法包装。
@@ -57,39 +58,37 @@ val ScriptBukkitInstance = ScriptBukkit()
 
 @Awake(LifeCycle.ENABLE)
 fun registerExternalData() {
-    defaultData.putAll(
-        linkedMapOf(
-            "mmUtil" to mmUtil,
-            "mmJsonUtil" to mmJsonUtil,
-            "mmLegacySectionUtil" to mmLegacySectionUtil,
-            "mmLegacyAmpersandUtil" to mmLegacyAmpersandUtil,
-//            "jsonUtils" to jsonUtils,
-            "ItemStackUtil" to ItemStackUtil,
-            "EventUtil" to EventUtil,
-            "ThreadUtil" to ThreadUtil,
-            "PlayerUtil" to PlayerUtil,
-            "EntityUtil" to EntityUtil,
-            "BlockUtil" to BlockUtil,
-            "RandomUtil" to RandomUtil,
-            "MathUtil" to MathUtil,
-            "DungeonAPI" to KAngelDungeonAPI::class.java,
-            "Math" to Math::class.java,
-            "System" to System::class.java,
-            "Sys" to Sys,
-            "Bukkit" to ScriptBukkitInstance,
-            "Gson" to Gson::class.java,
-            "TargetSelectorHelper" to TargetSelectorHelper,
-            "ObstacleManager" to ObstacleManager,
-            "MonsterManager" to MonsterManager,
-            "RegionManager" to RegionManager,
-            "PlanManager" to PlanManager,
-            "KitManager" to KitManager,
-            "DungeonHelper" to DungeonHelper,
-            "TaskManager" to TaskManager
-        ))
-    val event = KAngelDungeonCustomScriptDataLoadEvent(defaultData)
+    val data = linkedMapOf<String, Any?>(
+        "mmUtil" to mmUtil,
+        "mmJsonUtil" to mmJsonUtil,
+        "mmLegacySectionUtil" to mmLegacySectionUtil,
+        "mmLegacyAmpersandUtil" to mmLegacyAmpersandUtil,
+        "ItemStackUtil" to ItemStackUtil,
+        "EventUtil" to EventUtil,
+        "ThreadUtil" to ThreadUtil,
+        "PlayerUtil" to PlayerUtil,
+        "EntityUtil" to EntityUtil,
+        "BlockUtil" to BlockUtil,
+        "RandomUtil" to RandomUtil,
+        "MathUtil" to MathUtil,
+        "DungeonAPI" to KAngelDungeonAPI::class.java,
+        "Math" to Math::class.java,
+        "System" to System::class.java,
+        "Sys" to Sys,
+        "Bukkit" to ScriptBukkitInstance,
+        "Gson" to Gson::class.java,
+        "TargetSelectorHelper" to TargetSelectorHelper,
+        "ObstacleManager" to ObstacleManager,
+        "MonsterManager" to MonsterManager,
+        "RegionManager" to RegionManager,
+        "PlanManager" to PlanManager,
+        "KitManager" to KitManager,
+        "DungeonHelper" to DungeonHelper,
+        "TaskManager" to TaskManager
+    )
+    val event = KAngelDungeonCustomScriptDataLoadEvent(data)
     event.call()
-    defaultData = event.defaultData
+    defaultData = event.defaultData.toMap()
 }
 
 data class Agents(

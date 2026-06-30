@@ -123,7 +123,18 @@ data class DungeonTemplate(
     // 可破坏方块白名单（为空则使用 blockBreak 原有规则）
     val breakableBlocks: List<String> = emptyList(),
     // 玩家放置方块追踪配置
-    val playerBlocks: PlayerBlocksConfig = PlayerBlocksConfig()
+    val playerBlocks: PlayerBlocksConfig = PlayerBlocksConfig(),
+
+    // ===== 拓展功能配置 =====
+
+    // BossBar 配置
+    val bossBar: BossBarConfig = BossBarConfig(),
+    // 计分板配置
+    val scoreboard: ScoreboardConfig = ScoreboardConfig(),
+    // 难度动态缩放配置
+    val difficultyScaling: DifficultyScalingConfig = DifficultyScalingConfig(),
+    // 地牢聊天配置
+    val dungeonChat: DungeonChatConfig = DungeonChatConfig()
 ) {
     /**
      * 获取解析后的出生点坐标（Vector），兼容 spawnpoint 配置
@@ -192,6 +203,9 @@ class DungeonInstance(
 
     // 玩家掉线时间戳，供重连机制使用
     val playerDisconnectTimes: ConcurrentHashMap<UUID, Long> = ConcurrentHashMap(),
+
+    // 玩家加入时间戳（用于准确计算每位玩家的实际游戏时间）
+    val playerJoinTimes: ConcurrentHashMap<UUID, Long> = ConcurrentHashMap(),
 
     // 位置信息
     val spawnLocation: Location,
@@ -279,6 +293,8 @@ class DungeonInstance(
         val added = players.add(player.uniqueId)
 
         if (added) {
+            // 记录玩家加入时间（用于统计准确游戏时间）
+            playerJoinTimes[player.uniqueId] = System.currentTimeMillis()
             // 5. 更新反向索引
             KAngelDungeon.playerToInstanceIndex[player.uniqueId] = uuid
             // 6. 缓存玩家进入地牢前的位置
@@ -299,6 +315,9 @@ class DungeonInstance(
                     player.sendTitle(title, "", 10, 60, 20)
                 }
             }
+
+            // 应用计分板
+            io.github.zzzyyylllty.kangeldungeon.util.scoreboard.ScoreboardManager.applyDungeonScoreboard(player, this)
         }
 
         return added
@@ -355,6 +374,9 @@ class DungeonInstance(
                     player.sendTitle(title, "", 10, 40, 20)
                 }
             }
+            // 4.8 恢复玩家计分板
+            io.github.zzzyyylllty.kangeldungeon.util.scoreboard.ScoreboardManager.restorePlayerScoreboard(player)
+
             // 5. 传送玩家回到进入地牢前的位置
             try {
                 val prev = DungeonHelper.playerPreviousLocations.remove(player.uniqueId)
@@ -436,6 +458,9 @@ class DungeonInstance(
                 setGameRule(rule, value.toString())
             }
         }
+
+        // 5.4 创建计时器 BossBar
+        io.github.zzzyyylllty.kangeldungeon.util.bossbar.BossBarManager.createTimerBar(this)
 
         // 5.5 应用环境配置
         if (template != null) {
@@ -532,7 +557,10 @@ class DungeonInstance(
         DungeonCompletePostEvent(this).call()
         meta.add("dungeon.complete", 1)
 
-        // 6. 为每个在线玩家触发单人完成事件（供 Chemdah 任务系统使用）
+        // 6. 记录玩家统计
+        io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.recordDungeonEnd(this, success = true)
+
+        // 6b. 为每个在线玩家触发单人完成事件（供 Chemdah 任务系统使用）
         firePerPlayerEvent("DungeonPlayerCompleteEvent") { DungeonPlayerCompleteEvent(this, it) }
 
         // 7. 执行通关奖励
@@ -591,7 +619,10 @@ class DungeonInstance(
         DungeonFailPostEvent(this).call()
         meta.add("dungeon.fail", 1)
 
-        // 6. 为每个在线玩家触发单人失败事件（供 Chemdah 任务系统使用）
+        // 6. 记录玩家统计
+        io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.recordDungeonEnd(this, success = false)
+
+        // 6b. 为每个在线玩家触发单人失败事件（供 Chemdah 任务系统使用）
         firePerPlayerEvent("DungeonPlayerFailEvent") { DungeonPlayerFailEvent(this, it) }
 
         // 7. 执行失败奖励命令

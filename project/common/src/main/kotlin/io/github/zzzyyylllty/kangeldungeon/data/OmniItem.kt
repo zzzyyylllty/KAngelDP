@@ -70,8 +70,8 @@ data class OmniItem(
             parameters["custom-name"]?.toString()?.toComponent()?.let { meta.customName(it) }
             parameters["item-name"]?.toString()?.toComponent()?.let { meta.itemName(it) }
             (parameters["item-model"] ?: parameters["model"])?.toString()?.let { meta.itemModel = NamespacedKey.fromString(it) }
+            parameters["lore"].asListEnhanced()?.toComponent()?.let { meta.lore(it) }
             itemStack.setItemMeta(meta)
-            parameters["lore"].asListEnhanced()?.toComponent()?.let { itemStack.lore(it) }
 
         }
         if (components != null && components.isNotEmpty()) {

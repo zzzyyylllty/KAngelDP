@@ -12,6 +12,7 @@ import taboolib.common.platform.function.submit
 import taboolib.module.nms.ItemTag
 import taboolib.module.nms.getItemTag
 import taboolib.module.nms.setItemTag
+import java.util.concurrent.CompletableFuture
 
 object ItemStackUtil {
 
@@ -86,7 +87,11 @@ object ItemStackUtil {
     fun removeItemFromPlayer(player: Player, material: String, amount: Int): Boolean {
         val mat = Material.getMaterial(material.uppercase()) ?: return false
         var needed = amount.coerceAtLeast(1)
-        if (!Bukkit.isPrimaryThread()) return false
+        if (!Bukkit.isPrimaryThread()) {
+            val future = CompletableFuture<Boolean>()
+            submit { future.complete(removeItemFromPlayer(player, material, amount)) }
+            return try { future.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { false }
+        }
         if (countItem(player, material) < needed) return false
         for (item in player.inventory.contents) {
             if (item == null || item.type != mat) continue

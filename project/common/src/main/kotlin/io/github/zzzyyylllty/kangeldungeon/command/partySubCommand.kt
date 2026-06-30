@@ -83,7 +83,10 @@ object PartyCommand {
                     sender.sendStringAsComponent(sender.asLangText("PartyLeaderOnlyCommand"))
                     return@execute
                 }
-                if (player.uniqueId == target.uniqueId) return@execute
+                if (player.uniqueId == target.uniqueId) {
+                    sender.sendStringAsComponent(sender.asLangText("PartyInviteSelf"))
+                    return@execute
+                }
                 val success = TeamManager.sendInvite(team.teamId, player, target)
                 if (success) {
                     player.sendStringAsComponent(sender.asLangText("PartyInviteSent", target.name))

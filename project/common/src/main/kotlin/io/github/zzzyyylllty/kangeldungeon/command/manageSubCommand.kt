@@ -344,6 +344,68 @@ object DungeonCommand {
     }
 
     /**
+     * 旁观地牢
+     * /kangeldungeon dungeon spectate <uuid>
+     */
+    @CommandBody
+    val spectate = subCommand {
+        dynamic("uuid") {
+            suggestion<CommandSender> { _, _ ->
+                KAngelDungeon.dungeonInstances
+                    .filter { it.value.state == DungeonState.ACTIVE || it.value.state == DungeonState.PREPARING }
+                    .map { it.key.toString() }
+                    .toList()
+            }
+            execute<CommandSender> { sender, context, argument ->
+                val player = sender as? Player ?: run {
+                    sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
+                    return@execute
+                }
+                if (!sender.hasPermission("kangeldungeon.command.spectate")) {
+                    sender.sendStringAsComponent(sender.asLangText("NoPermission"))
+                    return@execute
+                }
+                val instance = sender.resolveInstance(context["uuid"]) ?: return@execute
+                val world = instance.world
+                if (world == null) {
+                    sender.sendStringAsComponent(sender.asLangText("DungeonWorldNotExist"))
+                    return@execute
+                }
+                // 缓存当前位置，保存为旁观者
+                DungeonHelper.playerPreviousLocations.putIfAbsent(player.uniqueId, player.location.clone())
+                KAngelDungeon.spectatorTargets.add(player.uniqueId)
+                player.gameMode = org.bukkit.GameMode.SPECTATOR
+                player.teleport(instance.spawnLocation)
+                sender.sendStringAsComponent(sender.asLangText("DungeonSpectateStarted", instance.templateName))
+            }
+        }
+    }
+
+    /**
+     * 离开旁观模式
+     * /kangeldungeon dungeon spectateleave
+     */
+    @CommandBody
+    val spectateleave = subCommand {
+        execute<CommandSender> { sender, context, argument ->
+            val player = sender as? Player ?: run {
+                sender.sendStringAsComponent(sender.asLangText("PlayerOnlyCommand"))
+                return@execute
+            }
+            if (player.uniqueId !in KAngelDungeon.spectatorTargets) {
+                sender.sendStringAsComponent(sender.asLangText("DungeonNotSpectating"))
+                return@execute
+            }
+            KAngelDungeon.spectatorTargets.remove(player.uniqueId)
+            player.gameMode = org.bukkit.GameMode.SURVIVAL
+            val prev = DungeonHelper.playerPreviousLocations.remove(player.uniqueId)
+            val loc = prev ?: Bukkit.getWorlds().first().spawnLocation
+            player.teleport(loc)
+            sender.sendStringAsComponent(sender.asLangText("DungeonSpectateLeft"))
+        }
+    }
+
+    /**
      * 传送至地牢世界
      * /kangeldungeon dungeon tp <uuid>
      */

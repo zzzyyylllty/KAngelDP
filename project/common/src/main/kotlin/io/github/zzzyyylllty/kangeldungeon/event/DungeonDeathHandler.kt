@@ -50,8 +50,10 @@ object DungeonDeathHandler {
         val instance = if (instanceUuid != null) KAngelDungeon.dungeonInstances[instanceUuid] else null
         if (instance == null || instance.state != DungeonState.ACTIVE) return
 
-        // 标记为死亡
-        instance.markPlayerDead(player)
+        // 标记为死亡（首次标记成功后才统计死亡）
+        if (instance.markPlayerDead(player)) {
+            io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.recordDeath(player.uniqueId)
+        }
 
         // 触发 PLAYER_DEATH 任务
         TaskManager.triggerTasks(instance, "PLAYER_DEATH", mapOf(

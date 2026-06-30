@@ -17,8 +17,9 @@ fun actionMiniTell() = combinationParser {
     val mm = MiniMessage.miniMessage()
     it.group(text()).apply(it) { str ->
         now {
-            val sender = script().sender?.castSafely<CommandSender>()
-            (sender as Audience).sendMessage(mm.deserialize(str))
+            val sender = script().sender?.castSafely<CommandSender>() ?: return@now
+            if (sender !is Audience) return@now
+            sender.sendMessage(mm.deserialize(str))
         }
     }
 }

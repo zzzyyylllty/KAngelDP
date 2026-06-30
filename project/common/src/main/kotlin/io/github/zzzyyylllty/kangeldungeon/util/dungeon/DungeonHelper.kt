@@ -486,6 +486,9 @@ object DungeonHelper {
             // 还原障碍物方块并清理追踪数据（需要在世界卸载前执行）
             ObstacleManager.restoreBlocks(dungeonInstance)
 
+            // 清理战利品箱追踪数据
+            io.github.zzzyyylllty.kangeldungeon.util.loot.LootChestManager.clearWorld(worldName)
+
             // 还原玩家放置的方块（clearOnEnd）
             val placedBlocks = KAngelDungeon.playerPlacedBlocks.remove(worldName)
             if (placedBlocks != null) {
@@ -698,6 +701,8 @@ object DungeonHelper {
         )
         KAngelDungeon.dungeonInstances[uuid] = instance
         KAngelDungeon.worldInstanceIndex[worldName] = uuid
+        // 初始化战利品箱（世界就绪后填充配置的箱子）
+        try { io.github.zzzyyylllty.kangeldungeon.util.loot.LootChestManager.initializeChests(instance, world) } catch (_: Exception) {}
         instance.startPlansForTrigger("PREPARE")
 
         // 准备阶段即传送玩家进入地牢世界，使其可在准备期间自由移动和准备
@@ -716,6 +721,8 @@ object DungeonHelper {
                     template = template,
                     onSuccess = {
                         instance.worldReady = true
+                        // Schematic 模式下，战利品箱在粘贴后才存在，需要再次初始化
+                        try { io.github.zzzyyylllty.kangeldungeon.util.loot.LootChestManager.initializeChests(instance, world) } catch (_: Exception) {}
                         onWorldReady?.invoke(uuid)
                     },
                     onFailure = { error ->
@@ -763,6 +770,9 @@ object DungeonPlayerTracker {
     fun onPlayerQuit(event: PlayerQuitEvent) {
         val uuid = event.player.uniqueId
         DungeonHelper.playerPreviousLocations.remove(uuid)
+
+        // 清理旁观者追踪
+        KAngelDungeon.spectatorTargets.remove(uuid)
 
         // 清理 playerToInstanceIndex，允许玩家重连后加入新地牢
         val instanceUuid = KAngelDungeon.playerToInstanceIndex.remove(uuid)

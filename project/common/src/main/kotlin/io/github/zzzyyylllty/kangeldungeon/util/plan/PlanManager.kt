@@ -47,19 +47,18 @@ object PlanManager {
      */
     private fun schedulePlan(instance: DungeonInstance, plan: Plan): PlatformExecutor.PlatformTask? {
         val delay = (plan.delay ?: 0).toLong()
-        val runnable = Runnable { executePlanScript(instance, plan) }
 
         return if (plan.async) {
             if (plan.period != null) {
-                submit(async = true, delay = delay, period = plan.period.toLong()) { runnable.run() }
+                submit(async = true, delay = delay, period = plan.period.toLong()) { executePlanScript(instance, plan) }
             } else {
-                submit(async = true, delay = delay) { runnable.run() }
+                submit(async = true, delay = delay) { executePlanScript(instance, plan) }
             }
         } else {
             if (plan.period != null) {
-                submit(delay = delay, period = plan.period.toLong()) { runnable.run() }
+                submit(delay = delay, period = plan.period.toLong()) { executePlanScript(instance, plan) }
             } else {
-                submit(delay = delay) { runnable.run() }
+                submit(delay = delay) { executePlanScript(instance, plan) }
             }
         }
     }

@@ -168,10 +168,10 @@ object DataUtil {
         container["cooldown.$cooldownID"] = round(current + second * 1000).toLong()
     }
 
-    fun setCooldownMill(player: Player, cooldownID: String, tick: Int) {
+    fun setCooldownMill(player: Player, cooldownID: String, millis: Int) {
         val container = player.getDataContainer()
         val current = Instant.now().toEpochMilli()
-        container["cooldown.$cooldownID"] = current + tick
+        container["cooldown.$cooldownID"] = current + millis
     }
 
     fun extendCooldown(player: Player, cooldownID: String, second: Double) {
@@ -180,10 +180,10 @@ object DataUtil {
         container["cooldown.$cooldownID"] = round(current + second * 1000).toLong()
     }
 
-    fun extendCooldownMill(player: Player, cooldownID: String, tick: Int) {
+    fun extendCooldownMill(player: Player, cooldownID: String, millis: Int) {
         val container = player.getDataContainer()
         val current = container["cooldown.$cooldownID"]?.toLongOrNull() ?: Instant.now().toEpochMilli()
-        container["cooldown.$cooldownID"] = current + tick
+        container["cooldown.$cooldownID"] = current + millis
     }
 
     fun reduceCooldown(player: Player, cooldownID: String, second: Double) {
