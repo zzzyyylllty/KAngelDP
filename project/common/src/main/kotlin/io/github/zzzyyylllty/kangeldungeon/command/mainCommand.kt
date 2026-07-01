@@ -168,6 +168,9 @@ object KAngelDungeonMainCommand {
     val admin = AdminCommand
 
     @CommandBody
+    val editor = io.github.zzzyyylllty.kangeldungeon.editor.EditorCommand
+
+    @CommandBody
     val reload = subCommand {
         execute<CommandSender> { sender, context, argument ->
             sender.sendStringAsComponent(sender.asLangText("MainReloading"))

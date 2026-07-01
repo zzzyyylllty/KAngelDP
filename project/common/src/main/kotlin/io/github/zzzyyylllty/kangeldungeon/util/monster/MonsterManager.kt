@@ -3,6 +3,7 @@ package io.github.zzzyyylllty.kangeldungeon.util.monster
 import io.github.zzzyyylllty.kangeldungeon.KAngelDungeon
 import io.github.zzzyyylllty.kangeldungeon.data.*
 import io.github.zzzyyylllty.kangeldungeon.data.defaultData
+import io.github.zzzyyylllty.kangeldungeon.event.DungeonBossKillEvent
 import io.github.zzzyyylllty.kangeldungeon.event.DungeonMobKillEvent
 import io.github.zzzyyylllty.kangeldungeon.event.MonsterGroupClearEvent
 import io.github.zzzyyylllty.kangeldungeon.event.MonsterSpawnPostEvent
@@ -386,6 +387,19 @@ object MonsterManager {
                 }
                 DungeonMobKillEvent(instance, killer, entity.type.name, entity.customName?.toString() ?: entity.type.name, mobId, mobLevel, entity).call()
                 io.github.zzzyyylllty.kangeldungeon.util.stats.PlayerStatsManager.recordMobKill(killer.uniqueId)
+
+                // 如果该怪物组配置为Boss，触发 BossKillEvent
+                try {
+                    val template = instance.getTemplate()
+                    if (template != null) {
+                        val dungeonMonsters = KAngelDungeon.dungeonMonsterConfigs[template.name]
+                        val monsterCfg = dungeonMonsters?.get(configId)
+                                ?: KAngelDungeon.monsterConfigs[configId]
+                        if (monsterCfg != null && monsterCfg.boss) {
+                            DungeonBossKillEvent(instance, killer, entity.customName?.toString() ?: entity.type.name, mobId, entity).call()
+                        }
+                    }
+                } catch (_: Exception) {}
             } catch (e: Exception) {
                 warningL("WarningMonsterKillEventFailed", entity.type.name, e.message ?: "Unknown error")
             }

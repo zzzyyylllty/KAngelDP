@@ -118,6 +118,8 @@ object KAngelDungeon : Plugin(), KAngelDungeonAPI {
 
     override val teamManager: TeamManager get() = TeamManager
 
+    override val editor: EditorAPI get() = io.github.zzzyyylllty.kangeldungeon.editor.EditorManager
+
     override fun registerTeamProvider(provider: TeamProvider) {
         TeamManager.registerProvider(provider)
     }

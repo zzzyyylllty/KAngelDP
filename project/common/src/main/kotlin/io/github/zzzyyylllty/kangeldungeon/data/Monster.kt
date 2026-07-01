@@ -35,7 +35,9 @@ data class MonsterConfig(
     // 生成间隔（tick），同一组内每个怪物依次生成的间隔，0 = 同时全部生成
     val spawnInterval: Long = 0,
     // 优先级，数值越高越先生成（多个组同时触发时）
-    val priority: Int = 0
+    val priority: Int = 0,
+    // 是否为Boss（用于成就/任务/事件系统）
+    val boss: Boolean = false
 )
 
 data class MonsterSpawnEntry(

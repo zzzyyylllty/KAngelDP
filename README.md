@@ -2,6 +2,8 @@
 
 # WORK ON PROGRESS...
 
+[Documentation](docs)
+
 超天地牢副本管理系统服务 (Liminal Skyline v4.0 服务)
 
 ChoTen Dungeon management system service (Liminal Skyline v4.0 Service)

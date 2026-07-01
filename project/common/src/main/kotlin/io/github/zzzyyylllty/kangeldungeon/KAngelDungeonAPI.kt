@@ -16,6 +16,10 @@ interface KAngelDungeonAPI {
 
     fun getTeamProvider(): TeamProvider?
 
+    // ===== 可视化编辑器 API =====
+
+    val editor: EditorAPI
+
     // ===== 拓展功能 API =====
 
     /** 获取玩家跨地牢统计 */

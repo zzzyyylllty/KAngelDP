@@ -1130,7 +1130,7 @@ fun parseLootChestConfig(id: String, data: Map<String, Any?>): LootChestConfig? 
 }
 
 /**
- * 加载全局战利品箱配置文件（位于 loot/ 目录下，所有地瓜通用）
+ * 加载全局战利品箱配置文件（位于 loot/ 目录下，所有地牢通用）
  */
 fun loadGlobalLootChestFiles() {
     val lootFolder = File(getDataFolder(), "loot")

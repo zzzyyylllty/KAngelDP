@@ -53,6 +53,25 @@ class DungeonMobKillEvent(
     override val allowCancelled: Boolean = false
 ) : BukkitProxyEvent()
 
+/** 玩家在地牢中击杀 Boss 时触发，不可取消 */
+class DungeonBossKillEvent(
+    val instance: DungeonInstance,
+    val player: Player,
+    val bossName: String,
+    val bossId: String,
+    val entity: LivingEntity,
+    override val allowCancelled: Boolean = false
+) : BukkitProxyEvent()
+
+/** 玩家在地牢中打开战利品箱时触发，不可取消 */
+class DungeonChestOpenEvent(
+    val instance: DungeonInstance,
+    val player: Player,
+    val chestId: String,
+    val chestLocation: org.bukkit.Location,
+    override val allowCancelled: Boolean = false
+) : BukkitProxyEvent()
+
 /** 玩家通关地牢时触发，不可取消 */
 class DungeonPlayerCompleteEvent(
     val instance: DungeonInstance,

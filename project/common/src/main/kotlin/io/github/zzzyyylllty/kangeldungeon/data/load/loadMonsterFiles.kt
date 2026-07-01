@@ -86,6 +86,7 @@ fun parseMonsterConfig(id: String, data: Map<String, Any?>): MonsterConfig? {
         val damageMultiplier = (data["damageMultiplier"] as? Number)?.toDouble() ?: 1.0
         val spawnInterval = (data["spawnInterval"] as? Number)?.toLong() ?: 0
         val priority = (data["priority"] as? Number)?.toInt() ?: 0
+        val boss = data["boss"] as? Boolean ?: false
 
         return MonsterConfig(
             id = id,
@@ -103,7 +104,8 @@ fun parseMonsterConfig(id: String, data: Map<String, Any?>): MonsterConfig? {
             healthMultiplier = healthMultiplier,
             damageMultiplier = damageMultiplier,
             spawnInterval = spawnInterval,
-            priority = priority
+            priority = priority,
+            boss = boss
         )
     } catch (e: Exception) {
         devLog("Failed to parse monster config '$id': ${e.message}")
