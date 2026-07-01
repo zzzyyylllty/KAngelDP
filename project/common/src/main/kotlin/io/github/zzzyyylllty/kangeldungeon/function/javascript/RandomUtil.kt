@@ -1,13 +1,13 @@
 package io.github.zzzyyylllty.kangeldungeon.function.javascript
 
-import kotlin.random.Random
+import java.util.Random
 
 /**
  * 随机工具 - 提供 JS 脚本中的随机数/随机选择操作
  */
 object RandomUtil {
 
-    private val random = Random
+    private val random = Random()
 
     /**
      * 生成 [0, bound) 的随机整数
@@ -97,5 +97,46 @@ object RandomUtil {
             if (r <= 0.0) return key
         }
         return entries.last().first
+    }
+
+    /**
+     * 高斯分布随机数（正态分布）
+     * JS: RandomUtil.nextGaussian(0, 1)  — 平均值为0，标准差为1的正态分布
+     */
+    fun nextGaussian(mean: Double = 0.0, stdDev: Double = 1.0): Double {
+        return random.nextGaussian() * stdDev + mean
+    }
+
+    /**
+     * 从加权 Map 中随机选 N 个不重复元素
+     * JS: RandomUtil.weightedPickList({a: 10, b: 30, c: 60}, 2)
+     */
+    fun weightedPickList(weightMap: Map<String, Any?>, count: Int): List<String> {
+        if (weightMap.isEmpty() || count <= 0) return emptyList()
+        val pool = weightMap.entries.mapNotNull { (key, value) ->
+            val weight = when (value) {
+                is Number -> value.toDouble()
+                is String -> value.toDoubleOrNull()
+                else -> null
+            }?.takeIf { it > 0 } ?: return@mapNotNull null
+            key to weight
+        }.toMutableList()
+        if (pool.isEmpty()) return emptyList()
+        val result = mutableListOf<String>()
+        val n = count.coerceAtMost(pool.size)
+        repeat(n) {
+            val total = pool.sumOf { it.second }
+            if (total <= 0.0) return@repeat
+            var r = random.nextDouble() * total
+            for (i in pool.indices) {
+                r -= pool[i].second
+                if (r <= 0.0) {
+                    result.add(pool[i].first)
+                    pool.removeAt(i)
+                    break
+                }
+            }
+        }
+        return result
     }
 }

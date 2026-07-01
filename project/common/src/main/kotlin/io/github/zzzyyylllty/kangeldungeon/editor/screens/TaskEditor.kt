@@ -5,6 +5,10 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -35,7 +39,7 @@ object TaskEditor {
             }
         }
 
-        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>("§8Tasks: $dungeonName") {
+        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>(player.langStr("title.taskList", dungeonName)) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
@@ -43,15 +47,15 @@ object TaskEditor {
             elements { allData.entries.toList() }
             onGenerate { _, entry, _, _ ->
                 val (id, data) = entry
-                GuiItems.buildItem(Material.TRIPWIRE_HOOK) {
-                    name = "<yellow>$id"
-                    lore(
-                        "<gray>Trigger: <white>${data["trigger"] ?: "?"}",
-                        "<gray>Max Exec: <white>${data["maxExecutions"] ?: "-1 (∞)"}",
-                        "<gray>Cooldown: <white>${data["cooldown"] ?: 0} ticks",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to delete"
-                    )
-                }
+                val maxExecStr = data["maxExecutions"]?.toString() ?: player.langStr("task.infinity")
+                GuiItems.compItem(Material.TRIPWIRE_HOOK, player.lang("task.name", id), listOf(
+                    player.lang("task.trigger", data["trigger"] ?: "?"),
+                    player.lang("task.maxExec", maxExecStr),
+                    player.lang("task.cooldown", data["cooldown"] ?: 0),
+                    Component.empty(),
+                    player.lang("common.clickEdit"),
+                    player.lang("common.shiftDelete")
+                ))
             }
             onClick { event, entry ->
                 if (event.clickEvent().isShiftClick) {
@@ -59,7 +63,7 @@ object TaskEditor {
                 } else openEditor(player, dungeonName, entry.key, entry.value)
             }
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "Task ID", null) { id ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.taskId"), null) { id ->
                     val data = linkedMapOf<String, Any?>("trigger" to "CUSTOM", "filters" to linkedMapOf<String, Any?>(), "maxExecutions" to -1, "cooldown" to 0)
                     openEditor(player, dungeonName, id, data as MutableMap<String, Any?>)
                 }
@@ -77,16 +81,18 @@ object TaskEditor {
         EditorSession.get(player).enterDungeon(dungeonName)
 
         fun render() {
-            player.openMenu<Chest>("§8Task: $id") {
+            player.openMenu<Chest>(player.langStr("title.taskEditor", id)) {
                 rows(6)
                 map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "####S###B")
                 set('#', GuiItems.border())
 
+                @Suppress("UNCHECKED_CAST")
+                val taskAgent = (data.getOrPut("agent") { linkedMapOf<String, Any?>() } as MutableMap<String, Any?>)
                 set(9, GuiItems.enumItem("trigger", data["trigger"] as? String, TRIGGERS))
                 set(10, GuiItems.numberItem("maxExecutions (-1=∞)", data["maxExecutions"] as? Number))
                 set(11, GuiItems.numberItem("cooldown (ticks)", data["cooldown"] as? Number))
                 set(12, GuiItems.numberItem("priority", data["priority"] as? Number))
-                set(16, GuiItems.scriptPlaceholder("agent.onTrigger"))
+                set(16, GuiItems.fieldItem(Material.COMMAND_BLOCK, "agent.onTrigger (JS)", taskAgent["onTrigger"]))
 
                 set(49, GuiItems.saveButton())
                 set(50, GuiItems.backButton())
@@ -97,7 +103,8 @@ object TaskEditor {
                         10 -> InputPrompts.intInput(player, "Max Executions", (data["maxExecutions"] as? Number)?.toInt()) { data["maxExecutions"] = it; render() }
                         11 -> InputPrompts.intInput(player, "Cooldown (ticks)", (data["cooldown"] as? Number)?.toInt()) { data["cooldown"] = it; render() }
                         12 -> InputPrompts.intInput(player, "Priority", (data["priority"] as? Number)?.toInt()) { data["priority"] = it; render() }
-                        49 -> { saveEntry(dungeonName, id, data); player.sendMessage("§aSaved task '$id'!"); render() }
+                        16 -> InputPrompts.multilineInput(player, "onTrigger JS", taskAgent["onTrigger"] as? String) { taskAgent["onTrigger"] = it; render() }
+                        49 -> { saveEntry(dungeonName, id, data); player.langMsg("task.saved", id); render() }
                         50 -> openList(player, dungeonName)
                     }
                 }
@@ -117,5 +124,5 @@ object TaskEditor {
         KAngelDungeon.reloadCustomConfig(async = true)
     }
 
-    private fun getSlot(c: Char): Int = when (c) { 'A' -> 50; 'L' -> 45; 'N' -> 53; else -> 0 }
+    private fun getSlot(c: Char): Int = when (c) { 'A' -> 49; 'L' -> 45; 'N' -> 53; else -> 0 }
 }

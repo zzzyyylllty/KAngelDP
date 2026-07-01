@@ -122,4 +122,50 @@ object MathUtil {
         if (max == 0.0) return 0.0
         return (value / max * 100.0).coerceIn(0.0, 100.0)
     }
+
+    // ==================== 聚合 ====================
+
+    /**
+     * 取最小值（支持任意数量参数）
+     * JS: MathUtil.min(3, 7, 1, 9)  → 1
+     */
+    fun min(vararg values: Double): Double {
+        return values.minOrNull() ?: 0.0
+    }
+
+    /**
+     * 取最大值（支持任意数量参数）
+     * JS: MathUtil.max(3, 7, 1, 9)  → 9
+     */
+    fun max(vararg values: Double): Double {
+        return values.maxOrNull() ?: 0.0
+    }
+
+    /**
+     * 整型最小值
+     * JS: MathUtil.minInt(3, 7, 1, 9)  → 1
+     */
+    fun minInt(vararg values: Int): Int {
+        return values.minOrNull() ?: 0
+    }
+
+    /**
+     * 整型最大值
+     * JS: MathUtil.maxInt(3, 7, 1, 9)  → 9
+     */
+    fun maxInt(vararg values: Int): Int {
+        return values.maxOrNull() ?: 0
+    }
+
+    /**
+     * 将一个范围的值映射到另一个范围
+     * JS: MathUtil.map(0.5, 0, 1, 0, 100)  → 50.0
+     * JS: MathUtil.map(0, 0, 100, 0, 1)    → 0.0
+     * JS: MathUtil.map(50, 0, 100, 0, 1)   → 0.5
+     */
+    fun map(value: Double, fromMin: Double, fromMax: Double, toMin: Double, toMax: Double): Double {
+        if (fromMax == fromMin) return toMin
+        val ratio = (value - fromMin) / (fromMax - fromMin)
+        return toMin + ratio * (toMax - toMin)
+    }
 }

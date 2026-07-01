@@ -5,6 +5,10 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -27,7 +31,7 @@ object ObstacleEditor {
             }
         }
 
-        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>("§8Obstacles: $dungeonName") {
+        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>(player.langStr("title.obstacleList", dungeonName)) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
@@ -36,15 +40,14 @@ object ObstacleEditor {
             onGenerate { _, entry, _, _ ->
                 val (id, data) = entry
                 val gateCount = (data["obstacles"] as? Map<*, *>)?.size ?: 0
-                GuiItems.buildItem(Material.IRON_DOOR) {
-                    name = "<yellow>$id"
-                    lore(
-                        "<gray>Gates: <white>$gateCount",
-                        "<gray>OpenDelay: <white>${data["openDelaySeconds"]}s",
-                        "<gray>ActiveDuration: <white>${data["activeDurationSeconds"]}s",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to delete"
-                    )
-                }
+                GuiItems.compItem(Material.IRON_DOOR, player.lang("monster.name", id), listOf(
+                    player.lang("obstacle.gates", gateCount.toString()),
+                    player.lang("obstacle.openDelay", data["openDelaySeconds"]?.toString() ?: "?"),
+                    player.lang("obstacle.activeDuration", data["activeDurationSeconds"]?.toString() ?: "?"),
+                    Component.empty(),
+                    player.lang("common.clickEdit"),
+                    player.lang("common.shiftDelete")
+                ))
             }
             onClick { event, entry ->
                 if (event.clickEvent().isShiftClick) {
@@ -52,7 +55,7 @@ object ObstacleEditor {
                 } else openEditor(player, dungeonName, entry.key, entry.value)
             }
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "Obstacle ID", null) { id ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.obstacleId"), null) { id ->
                     val data = linkedMapOf<String, Any?>("openDelaySeconds" to 3.0, "activeDurationSeconds" to 10.0, "obstacles" to linkedMapOf<String, Any?>())
                     openEditor(player, dungeonName, id, data as MutableMap<String, Any?>)
                 }
@@ -70,21 +73,32 @@ object ObstacleEditor {
         EditorSession.get(player).enterDungeon(dungeonName)
 
         fun render() {
-            player.openMenu<Chest>("§8Obstacle: $id") {
+            player.openMenu<Chest>(player.langStr("title.obstacleEditor", id)) {
                 rows(6)
                 map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "####S###B")
                 set('#', GuiItems.border())
 
+                @Suppress("UNCHECKED_CAST")
+                val obstacleAgent = (data.getOrPut("agent") { linkedMapOf<String, Any?>() } as MutableMap<String, Any?>)
                 set(9, GuiItems.numberItem("openDelaySeconds", data["openDelaySeconds"] as? Number))
                 set(10, GuiItems.numberItem("activeDurationSeconds", data["activeDurationSeconds"] as? Number))
-                set(11, GuiItems.scriptPlaceholder("agent.onPrepare"))
-                set(12, GuiItems.scriptPlaceholder("agent.onStart"))
+                set(11, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", obstacleAgent["onPrepare"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(12, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", obstacleAgent["onStart"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
 
                 val obstaclesCount = (data["obstacles"] as? Map<*, *>)?.size ?: 0
-                set(16, GuiItems.buildItem(Material.IRON_BLOCK) {
-                    name = "<yellow>Gates / Obstacles</yellow>"
-                    lore("<gray>Count: <white>$obstaclesCount", "", "<gray><italic>Click to manage")
-                })
+                set(16, GuiItems.compItem(Material.IRON_BLOCK, player.lang("obstacle.gateTitle"), listOf(
+                    player.lang("obstacle.gateCount", obstaclesCount.toString()),
+                    Component.empty(),
+                    player.lang("common.clickManage")
+                )))
 
                 set(49, GuiItems.saveButton())
                 set(50, GuiItems.backButton())
@@ -93,8 +107,10 @@ object ObstacleEditor {
                     when (event.rawSlot) {
                         9 -> InputPrompts.doubleInput(player, "Open Delay (seconds)", (data["openDelaySeconds"] as? Number)?.toDouble()) { data["openDelaySeconds"] = it; render() }
                         10 -> InputPrompts.doubleInput(player, "Active Duration (seconds)", (data["activeDurationSeconds"] as? Number)?.toDouble()) { data["activeDurationSeconds"] = it; render() }
+                        11 -> InputPrompts.multilineInput(player, player.langStr("inputTitle.agentScript"), obstacleAgent["onPrepare"] as? String) { obstacleAgent["onPrepare"] = it; render() }
+                        12 -> InputPrompts.multilineInput(player, player.langStr("inputTitle.agentScript"), obstacleAgent["onStart"] as? String) { obstacleAgent["onStart"] = it; render() }
                         16 -> openGatesEditor(player, id, data)
-                        49 -> { saveEntry(dungeonName, id, data); player.sendMessage("§aSaved obstacle '$id'!"); render() }
+                        49 -> { saveEntry(dungeonName, id, data); player.langMsg("obstacle.saved", id); render() }
                         50 -> openList(player, dungeonName)
                     }
                 }
@@ -108,7 +124,7 @@ object ObstacleEditor {
         @Suppress("UNCHECKED_CAST")
         val gates = (parentData["obstacles"] as? MutableMap<String, Any?>) ?: linkedMapOf<String, Any?>()
 
-        player.openMenu<PageableChest<MutableMap.MutableEntry<String, Any?>>>("§8Gates") {
+        player.openMenu<PageableChest<MutableMap.MutableEntry<String, Any?>>>(player.langStr("title.gates")) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
@@ -116,14 +132,17 @@ object ObstacleEditor {
             elements { gates.entries.toList() }
             onGenerate { _, entry, _, _ ->
                 val (gid, gateData) = entry
-                val details = if (gateData is Map<*, *>) {
-                    val mode = gateData["mode"] ?: "RESTORE_BLOCKS"
-                    "Mode: $mode"
-                } else "simple"
-                GuiItems.buildItem(Material.IRON_BARS) {
-                    name = "<yellow>$gid</yellow>"
-                    lore("<gray>$details", "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to remove")
+                val modeStr = if (gateData is Map<*, *>) {
+                    gateData["mode"] as? String ?: "RESTORE_BLOCKS"
+                } else {
+                    "simple"
                 }
+                GuiItems.compItem(Material.IRON_BARS, player.lang("monster.name", gid), listOf(
+                    player.lang("gate.details", modeStr),
+                    Component.empty(),
+                    player.lang("common.clickEdit"),
+                    player.lang("common.shiftDelete")
+                ))
             }
             onClick { event, entry ->
                 if (event.clickEvent().isShiftClick) {
@@ -135,7 +154,7 @@ object ObstacleEditor {
                 }
             }
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "Gate ID", null) { gid ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.gateId"), null) { gid ->
                     gates[gid] = linkedMapOf<String, Any?>("mode" to "RESTORE_BLOCKS")
                     parentData["obstacles"] = gates
                     openGatesEditor(player, obstacleId, parentData)
@@ -158,18 +177,18 @@ object ObstacleEditor {
         val modes = listOf("RESTORE_BLOCKS")
 
         fun render() {
-            player.openMenu<Chest>("§8Gate: $gateId") {
+            player.openMenu<Chest>(player.langStr("title.gateEditor", gateId)) {
                 rows(3)
                 for (i in 0..26) set(i, GuiItems.border())
 
-                set(10, GuiItems.enumItem("mode", gateData["mode"] as? String, modes))
+                set(10, GuiItems.enumItem(player.langStr("gate.mode"), gateData["mode"] as? String, modes))
 
                 set(22, GuiItems.saveButton())
                 set(24, GuiItems.backButton())
 
                 onClick(lock = true) { event ->
                     when (event.rawSlot) {
-                        10 -> InputPrompts.enumSelect(player, "Gate Mode", modes, gateData["mode"] as? String) {
+                        10 -> InputPrompts.enumSelect(player, player.langStr("inputTitle.gateMode"), modes, gateData["mode"] as? String) {
                             gateData["mode"] = it; gates[gateId] = gateData; parentData["obstacles"] = gates; render()
                         }
                         22 -> {
@@ -196,5 +215,5 @@ object ObstacleEditor {
         KAngelDungeon.reloadCustomConfig(async = true)
     }
 
-    private fun getSlot(c: Char): Int = when (c) { 'A' -> 50; 'L' -> 45; 'N' -> 53; else -> 0 }
+    private fun getSlot(c: Char): Int = when (c) { 'A' -> 49; 'L' -> 45; 'N' -> 53; else -> 0 }
 }

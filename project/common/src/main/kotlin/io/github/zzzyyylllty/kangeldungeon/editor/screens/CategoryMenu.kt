@@ -1,7 +1,12 @@
 package io.github.zzzyyylllty.kangeldungeon.editor.screens
 
+import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -35,33 +40,33 @@ object CategoryMenu {
     fun open(player: Player, dungeonName: String) {
         val dir = YamlIO.dungeonFolder(dungeonName)
         val hasOption = YamlIO.dungeonFile(dungeonName, "", "option.yml").exists()
+        val session = EditorSession.get(player)
+        session.enterDungeon(dungeonName)
 
-        player.openMenu<Chest>("§8Edit: $dungeonName") {
+        player.openMenu<Chest>(player.langStr("title.category", dungeonName)) {
             rows(6)
             GuiItems.BORDER_SLOTS_6ROW.forEach { set(it, GuiItems.border()) }
-
-            // Row 0: border
-            for (i in 0..8) set(i, GuiItems.border())
 
             // Place category items in rows 1-4 (slots 9-44)
             categories.forEachIndexed { index, cat ->
                 val slot = 9 + index
                 val count = countEntries(dungeonName, cat.id)
-                set(slot, GuiItems.sectionItem(cat.material, cat.name, count))
+                set(slot, GuiItems.compItem(cat.material, player.lang("category.${cat.id}"), listOf(
+                    player.lang("common.entries", count.toString()),
+                    Component.empty(),
+                    player.lang("common.clickEdit")
+                )))
             }
 
-            // Back button (bottom-right)
+            // Back button
             set(49, GuiItems.backButton())
 
             // Dungeon name display
-            set(53, GuiItems.buildItem(Material.GRASS_BLOCK) {
-                name = "<gold>$dungeonName</gold>"
-                lore(
-                    "<gray>Config: <${if (hasOption) "green" else "red"}>${if (hasOption) "OK" else "missing option.yml"}",
-                    "",
-                    "<gray><italic>Click to reload dungeons"
-                )
-            })
+            set(53, GuiItems.compItem(Material.GRASS_BLOCK, player.lang("category.dungeonName", dungeonName), listOf(
+                player.lang("category.configStatus", if (hasOption) player.langStr("category.configOK") else player.langStr("category.configMissing")),
+                Component.empty(),
+                player.lang("category.clickReload")
+            )))
 
             onClick(lock = true) { event ->
                 val slot = event.rawSlot

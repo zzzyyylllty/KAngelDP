@@ -10,15 +10,28 @@
 
 获取当前毫秒时间戳。
 
-**返回值**: `Long` — 当前时间毫秒数
+```js
+var now = Sys.currentTimeMillis();
+```
 
----
+常用于测量耗时:
+```js
+var start = Sys.currentTimeMillis();
+// ... 执行操作 ...
+var elapsed = Sys.currentTimeMillis() - start;
+Sys.println("操作耗时: " + elapsed + "ms");
+```
 
 ### `Sys.nanoTime()`
 
-获取纳秒时间戳。
+获取纳秒时间戳（用于高精度测量，不宜用于显示时间）。
 
-**返回值**: `Long` — 纳秒时间戳
+```js
+var start = Sys.nanoTime();
+// ... 短操作 ...
+var elapsed = Sys.nanoTime() - start;
+Sys.println("耗时: " + elapsed + "ns");
+```
 
 ---
 
@@ -26,11 +39,10 @@
 
 输出到控制台（stdout）。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `message` | `Any?` | 要输出的信息 |
-
-**返回值**: 无
+```js
+Sys.println("JS 脚本执行成功");
+Sys.println("当前玩家: " + player.getName());
+```
 
 ---
 
@@ -38,11 +50,13 @@
 
 输出到控制台（stderr）。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `message` | `Any?` | 要输出的错误信息 |
-
-**返回值**: 无
+```js
+try {
+    // 可能出错的操作
+} catch (e) {
+    Sys.printerr("错误: " + e.message);
+}
+```
 
 ---
 
@@ -50,38 +64,28 @@
 
 读取系统属性。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `key` | `String` | 属性键（如 `"os.name"`） |
-
-**返回值**: `String?` — 属性值
-
----
+```js
+var os = Sys.getProperty("os.name");
+Sys.println("服务器系统: " + os);
+```
 
 ### `Sys.getProperty(key, default)`
 
-读取系统属性（带默认值）。
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `key` | `String` | 属性键 |
-| `default` | `String` | 默认值 |
-
-**返回值**: `String`
+```js
+var javaVer = Sys.getProperty("java.version", "unknown");
+```
 
 ---
 
 ### `Sys.sleep(millis)`
 
-睡眠指定毫秒。**不得在主线程调用**。
+睡眠指定毫秒。**不得在主线程调用**（仅在异步脚本中使用）。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `millis` | `Long` | 睡眠毫秒数 |
-
-**返回值**: 无
-
-**抛出**: `IllegalStateException` — 在主线程调用时
+```js
+// 仅限异步上下文！
+Sys.sleep(2000);  // 等待 2 秒
+Sys.println("2 秒后执行");
+```
 
 ---
 
@@ -89,16 +93,33 @@
 
 创建当前时间的 `java.util.Date` 对象。
 
-**返回值**: `java.util.Date`
-
----
+```js
+var now = Sys.newDate();
+Sys.println("当前时间: " + now.toString());
+```
 
 ### `Sys.newDate(millis)`
 
-从毫秒时间戳创建 `java.util.Date` 对象。
+从毫秒时间戳创建 Date。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `millis` | `Long` | 时间戳毫秒数 |
+```js
+var date = Sys.newDate(Sys.currentTimeMillis());
+```
 
-**返回值**: `java.util.Date`
+---
+
+## 常见用法
+
+**性能测量**:
+```js
+var t1 = Sys.nanoTime();
+// ... 大量运算 ...
+var t2 = Sys.nanoTime();
+Sys.println("耗时: " + ((t2 - t1) / 1000000) + "ms");
+```
+
+**调试日志**:
+```js
+Sys.println("[DEBUG] 玩家 " + player.getName() + " 触发了 onSpawn");
+Sys.println("[DEBUG] 位置: " + player.getLocation().toString());
+```

@@ -5,6 +5,11 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -39,7 +44,7 @@ object KitEditor {
             }
         }
 
-        val title = if (mode == "global") "§8Global Kits" else "§8Kits: $identifier"
+        val title = if (mode == "global") player.langStr("title.kitGlobal") else player.langStr("title.kitList", identifier)
 
         player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>(title) {
             rows(6)
@@ -50,15 +55,18 @@ object KitEditor {
             onGenerate { _, entry, _, _ ->
                 val (id, data) = entry
                 val rewardsCount = (data["rewards"] as? List<*>)?.size ?: 0
-                GuiItems.buildItem(Material.CHEST) {
-                    name = "<yellow>$id"
-                    lore(
-                        "<gray>Rewards: <white>$rewardsCount entries",
-                        "<gray>Cooldown: <white>${data["cooldown"] ?: 0}s",
-                        "<gray>Min/Max: <white>${data["minRewards"] ?: 1}/${data["maxRewards"] ?: 1}",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to delete"
+                GuiItems.compItem(
+                    Material.CHEST,
+                    player.lang("kit.name", id),
+                    listOf(
+                        player.lang("kit.rewards", rewardsCount.toString()),
+                        player.lang("kit.cooldown", (data["cooldown"])?.toString() ?: "0"),
+                        player.lang("kit.minMax", (data["minRewards"] ?: 1).toString(), (data["maxRewards"] ?: 1).toString()),
+                        Component.empty(),
+                        player.lang("common.clickEdit"),
+                        player.lang("common.shiftDelete")
                     )
-                }
+                )
             }
             onClick { event, entry ->
                 if (event.clickEvent().isShiftClick) {
@@ -69,7 +77,7 @@ object KitEditor {
                 } else openEditor(player, identifier, entry.key, entry.value, mode)
             }
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "Kit ID", null) { id ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.kitId"), null) { id ->
                     val data = linkedMapOf<String, Any?>("rewards" to emptyList<Any>(), "minRewards" to 1, "maxRewards" to 1, "cooldown" to 0)
                     openEditor(player, identifier, id, data as MutableMap<String, Any?>, mode)
                 }
@@ -89,7 +97,7 @@ object KitEditor {
         EditorSession.get(player).enterDungeon(identifier)
 
         fun render() {
-            player.openMenu<Chest>("§8Kit: $id") {
+            player.openMenu<Chest>(player.langStr("title.kitEditor", id)) {
                 rows(6)
                 map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "####S###B")
                 set('#', GuiItems.border())
@@ -102,10 +110,15 @@ object KitEditor {
                 set(14, GuiItems.fieldItem(Material.PAPER, "broadcastMessage", data["broadcastMessage"]))
 
                 val rewardsCount = (data["rewards"] as? List<*>)?.size ?: 0
-                set(24, GuiItems.buildItem(Material.GOLD_INGOT) {
-                    name = "<yellow>Rewards</yellow>"
-                    lore("<gray>Count: <white>$rewardsCount entries", "", "<gray><italic>Click to manage")
-                })
+                set(24, GuiItems.compItem(
+                    Material.GOLD_INGOT,
+                    player.lang("kit.rewardsTitle"),
+                    listOf(
+                        player.lang("kit.rewardsCount", rewardsCount.toString()),
+                        Component.empty(),
+                        player.lang("common.clickManage")
+                    )
+                ))
 
                 set(49, GuiItems.saveButton())
                 set(50, GuiItems.backButton())
@@ -119,7 +132,7 @@ object KitEditor {
                         13 -> InputPrompts.intInput(player, "Max Rewards", (data["maxRewards"] as? Number)?.toInt()) { data["maxRewards"] = it; render() }
                         14 -> InputPrompts.textInput(player, "Broadcast Message", data["broadcastMessage"] as? String) { data["broadcastMessage"] = it; render() }
                         24 -> openKitRewardsEditor(player, identifier, id, data, mode)
-                        49 -> { saveEntry(identifier, id, data, mode); player.sendMessage("§aSaved kit '$id'!"); render() }
+                        49 -> { saveEntry(identifier, id, data, mode); player.langMsg("kit.saved", id); render() }
                         50 -> openEditorList(player, identifier, mode)
                     }
                 }
@@ -133,7 +146,7 @@ object KitEditor {
         @Suppress("UNCHECKED_CAST")
         val rewards = (parentData["rewards"] as? MutableList<Map<String, Any?>>)?.toMutableList() ?: mutableListOf()
 
-        player.openMenu<PageableChest<Map<String, Any?>>>("§8Kit Rewards") {
+        player.openMenu<PageableChest<Map<String, Any?>>>(player.langStr("title.kitRewards")) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
@@ -142,15 +155,19 @@ object KitEditor {
             onGenerate { _, reward, _, _ ->
                 val type = reward["type"] as? String ?: "?"
                 val itemName = reward["item"] as? String ?: reward["command"] as? String ?: ""
-                GuiItems.buildItem(Material.GOLD_NUGGET) {
-                    name = "<yellow>[$type] ${reward["source"] ?: ""} $itemName</yellow>"
-                    lore(
-                        "<gray>Weight: <white>${reward["weight"] ?: 1}",
-                        "<gray>Chance: <white>${reward["chance"] ?: "weight-based"}",
-                        "<gray>Amount: <white>${reward["amount"] ?: 1}",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to remove"
+                val rewardNameStr = "<yellow>[$type] ${reward["source"] ?: ""} $itemName</yellow>"
+                GuiItems.compItem(
+                    Material.GOLD_NUGGET,
+                    MiniMessage.miniMessage().deserialize(rewardNameStr),
+                    listOf(
+                        player.lang("reward.weight", (reward["weight"]?.toString() ?: "1")),
+                        player.lang("reward.chance", (reward["chance"]?.toString() ?: "weight-based")),
+                        player.lang("reward.amount", (reward["amount"]?.toString() ?: "1")),
+                        Component.empty(),
+                        player.lang("common.clickEdit"),
+                        player.lang("common.shiftDelete")
                     )
-                }
+                )
             }
             onClick { event, entry ->
                 val idx = rewards.indexOf(entry)
@@ -179,9 +196,9 @@ object KitEditor {
         val entry = list[index].toMutableMap()
 
         fun render() {
-            player.openMenu<Chest>("§8Reward #$index") {
-                rows(3)
-                for (i in 0..26) set(i, GuiItems.border())
+            player.openMenu<Chest>(player.langStr("title.kitReward", index.toString())) {
+                rows(5)
+                for (i in 0..44) set(i, GuiItems.border())
 
                 set(9, GuiItems.enumItem("type", entry["type"] as? String, listOf("ITEM", "COMMAND", "SCRIPT", "AGENT")))
                 set(10, GuiItems.fieldItem(Material.COMPASS, "source", entry["source"]))
@@ -191,8 +208,12 @@ object KitEditor {
                 set(14, GuiItems.fieldItem(Material.EXPERIENCE_BOTTLE, "chance (%)", entry["chance"]))
                 set(15, GuiItems.fieldItem(Material.COMMAND_BLOCK, "command", entry["command"]))
 
-                set(22, GuiItems.saveButton())
-                set(24, GuiItems.backButton())
+                set(18, GuiItems.fieldItem(Material.BOOK, "script (name)", entry["script"]))
+                set(19, GuiItems.enumItem("agentTrigger", entry["agentTrigger"] as? String, listOf("ONCE", "ON_KILL", "ON_COMPLETE")))
+                set(20, GuiItems.fieldItem(Material.COMMAND_BLOCK, "agentScript (JS)", entry["agentScript"]))
+
+                set(40, GuiItems.saveButton())
+                set(41, GuiItems.backButton())
 
                 onClick(lock = true) { event ->
                     when (event.rawSlot) {
@@ -203,8 +224,11 @@ object KitEditor {
                         13 -> InputPrompts.intInput(player, "Weight", (entry["weight"] as? Number)?.toInt()) { entry["weight"] = it; list[index] = entry; parentData["rewards"] = list.toMutableList(); render() }
                         14 -> InputPrompts.intInput(player, "Chance (-1=weight)", (entry["chance"] as? Number)?.toInt()) { entry["chance"] = it; list[index] = entry; parentData["rewards"] = list.toMutableList(); render() }
                         15 -> InputPrompts.textInput(player, "Command", entry["command"] as? String) { entry["command"] = it; list[index] = entry; parentData["rewards"] = list.toMutableList(); render() }
-                        22 -> { parentData["rewards"] = list.toMutableList(); openKitRewardsEditor(player, identifier, kitId, parentData, mode) }
-                        24 -> openKitRewardsEditor(player, identifier, kitId, parentData, mode)
+                        18 -> InputPrompts.textInput(player, "Script Name", entry["script"] as? String) { entry["script"] = it; list[index] = entry; parentData["rewards"] = list.toMutableList(); render() }
+                        19 -> InputPrompts.enumSelect(player, "Agent Trigger", listOf("ONCE", "ON_KILL", "ON_COMPLETE"), entry["agentTrigger"] as? String) { entry["agentTrigger"] = it; list[index] = entry; parentData["rewards"] = list.toMutableList(); render() }
+                        20 -> InputPrompts.multilineInput(player, "Agent Script JS", entry["agentScript"] as? String) { entry["agentScript"] = it; list[index] = entry; parentData["rewards"] = list.toMutableList(); render() }
+                        40 -> { parentData["rewards"] = list.toMutableList(); openKitRewardsEditor(player, identifier, kitId, parentData, mode) }
+                        41 -> openKitRewardsEditor(player, identifier, kitId, parentData, mode)
                     }
                 }
                 handLocked(true)
@@ -225,5 +249,5 @@ object KitEditor {
         KAngelDungeon.reloadCustomConfig(async = true)
     }
 
-    private fun getSlot(c: Char): Int = when (c) { 'A' -> 50; 'L' -> 45; 'N' -> 53; else -> 0 }
+    private fun getSlot(c: Char): Int = when (c) { 'A' -> 49; 'L' -> 45; 'N' -> 53; else -> 0 }
 }

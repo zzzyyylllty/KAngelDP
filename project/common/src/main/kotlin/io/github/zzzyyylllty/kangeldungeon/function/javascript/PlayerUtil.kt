@@ -320,6 +320,118 @@ object PlayerUtil {
         runOnMain { player.walkSpeed = speed.coerceIn(-1f, 1f) }
     }
 
+    // ==================== 查询状态 ====================
+
+    /**
+     * 获取玩家当前生命值
+     * JS: PlayerUtil.getHealth(player)
+     */
+    fun getHealth(player: Player): Double {
+        return player.health
+    }
+
+    /**
+     * 获取玩家最大生命值
+     * JS: PlayerUtil.getMaxHealth(player)
+     */
+    fun getMaxHealth(player: Player): Double {
+        return player.maxHealth
+    }
+
+    /**
+     * 获取玩家食物值 (0~20)
+     * JS: PlayerUtil.getFoodLevel(player)
+     */
+    fun getFoodLevel(player: Player): Int {
+        return player.foodLevel
+    }
+
+    /**
+     * 获取玩家饱和度 (0~20)
+     * JS: PlayerUtil.getSaturation(player)
+     */
+    fun getSaturation(player: Player): Float {
+        return player.saturation
+    }
+
+    /**
+     * 获取玩家经验等级
+     * JS: PlayerUtil.getLevel(player)
+     */
+    fun getLevel(player: Player): Int {
+        return player.level
+    }
+
+    /**
+     * 获取玩家经验进度 (0.0 ~ 1.0)
+     * JS: PlayerUtil.getExp(player)
+     */
+    fun getExp(player: Player): Float {
+        return player.exp
+    }
+
+    /**
+     * 获取玩家游戏模式
+     * JS: PlayerUtil.getGameMode(player)
+     */
+    fun getGameMode(player: Player): String {
+        return player.gameMode.name
+    }
+
+    /**
+     * 获取玩家位置（Location 对象）
+     * JS: PlayerUtil.getLocation(player)
+     */
+    fun getLocation(player: Player): org.bukkit.Location {
+        return player.location
+    }
+
+    /**
+     * 获取玩家所在世界名
+     * JS: PlayerUtil.getWorld(player)
+     */
+    fun getWorld(player: Player): String {
+        return player.world.name
+    }
+
+    /**
+     * 获取玩家延迟（ping）
+     * JS: PlayerUtil.getPing(player)
+     */
+    fun getPing(player: Player): Int {
+        return player.ping
+    }
+
+    /**
+     * 检查玩家是否有指定药水效果
+     * JS: PlayerUtil.hasPotionEffect(player, "SPEED")
+     */
+    fun hasPotionEffect(player: Player, type: String): Boolean {
+        val effectType = getPotionEffectType(type) ?: return false
+        return player.hasPotionEffect(effectType)
+    }
+
+    // ==================== 音效 ====================
+
+    /**
+     * 向玩家播放音效
+     * JS: PlayerUtil.playSound(player, "entity_experience_orb_pickup", 1.0, 1.0)
+     */
+    fun playSound(player: Player, sound: String, volume: Float = 1.0f, pitch: Float = 1.0f) {
+        val s = try { org.bukkit.Sound.valueOf(sound.uppercase()) } catch (_: Exception) { return }
+        runOnMain { player.playSound(player.location, s, volume.coerceIn(0f, Float.MAX_VALUE), pitch.coerceIn(0f, Float.MAX_VALUE)) }
+    }
+
+    /**
+     * 在世界坐标播放音效（所有玩家可听到）
+     * JS: PlayerUtil.playSoundAt("world", x, y, z, "entity_generic_explode", 1.0, 1.0)
+     */
+    fun playSoundAt(worldName: String, x: Double, y: Double, z: Double, sound: String, volume: Float = 1.0f, pitch: Float = 1.0f) {
+        val world = Bukkit.getWorld(worldName) ?: return
+        val s = try { org.bukkit.Sound.valueOf(sound.uppercase()) } catch (_: Exception) { return }
+        runOnMain { world.playSound(org.bukkit.Location(world, x, y, z), s, volume.coerceIn(0f, Float.MAX_VALUE), pitch.coerceIn(0f, Float.MAX_VALUE)) }
+    }
+
     // ==================== 权限 ====================
 
     /**

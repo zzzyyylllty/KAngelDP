@@ -5,6 +5,10 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -19,7 +23,7 @@ object MainMenu {
     fun open(player: Player) {
         val dungeons = YamlIO.listDungeons()
 
-        player.openMenu<PageableChest<String>>("§8KAngelDungeon Editor") {
+        player.openMenu<PageableChest<String>>(player.langStr("title.mainMenu")) {
             rows(6)
             map(
                 "#########",
@@ -43,11 +47,11 @@ object MainMenu {
                 val session = EditorSession.get(player)
                 if (event.clickEvent().isShiftClick) {
                     // Delete dungeon
-                    InputPrompts.confirmDialog(player, "Delete Dungeon", "Delete '$dungeonName' and all files?", {
+                    InputPrompts.confirmDialog(player, player.langStr("dungeon.deleteConfirm"), player.lang("dungeon.deletePrompt", dungeonName), {
                         val dir = YamlIO.dungeonFolder(dungeonName)
                         if (dir.exists()) dir.deleteRecursively()
                         KAngelDungeon.reloadCustomConfig(async = true)
-                        player.sendMessage("§cDungeon '$dungeonName' deleted!")
+                        player.langMsg("dungeon.deleted", dungeonName)
                         open(player)
                     })
                 } else {
@@ -58,14 +62,14 @@ object MainMenu {
 
             // "Create New Dungeon" button at slot 'A'
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "New Dungeon Name", null) { name ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.newDungeon"), null) { name ->
                     if (!name.matches(Regex("^[a-zA-Z0-9_\\-]+$"))) {
-                        player.sendMessage("§cInvalid name! Use letters, numbers, hyphens, underscores only.")
+                        player.langMsg("dungeon.invalidName")
                         return@textInput
                     }
                     val dir = YamlIO.dungeonFolder(name)
                     if (dir.exists()) {
-                        player.sendMessage("§cDungeon '$name' already exists!")
+                        player.langMsg("dungeon.alreadyExists", name)
                         open(player)
                         return@textInput
                     }
@@ -102,7 +106,7 @@ object MainMenu {
                     )
                     YamlIO.saveYaml(File(dir, "option.yml"), defaultOption)
                     KAngelDungeon.reloadCustomConfig(async = true)
-                    player.sendMessage("§aDungeon '$name' created!")
+                    player.langMsg("dungeon.created", name)
                     open(player)
                 }
             }
@@ -115,26 +119,21 @@ object MainMenu {
             // "Info" button at slot 'L'
             onClick(getSlot('L')) {
                 player.sendMessage("")
-                player.sendMessage("§6§l=== KAngelDungeon Editor ===")
-                player.sendMessage("§eClick a dungeon to edit it.")
-                player.sendMessage("§eShift+click to delete a dungeon.")
-                player.sendMessage("§eClick '✚ Add New' to create a new dungeon.")
-                player.sendMessage("§eJS script editing is not available in the editor.")
+                player.langMsg("menu.infoTitle")
+                player.langMsg("menu.infoClick")
+                player.langMsg("menu.infoShift")
+                player.langMsg("menu.infoAdd")
+                player.langMsg("menu.infoJS")
                 player.sendMessage("")
             }
 
             set(getSlot('A'), GuiItems.addButton())
-            set(getSlot('G'), GuiItems.buildItem(Material.COMPARATOR) {
-                name = "<gold>Global Configs</gold>"
-                lore(
-                    "<gray>Edit global kits and loot chests",
-                    "",
-                    "<gray><italic>Click to open"
-                )
-            })
-            set(getSlot('L'), GuiItems.buildItem(Material.COMPASS) {
-                name = "<aqua>Info / Help</aqua>"
-            })
+            set(getSlot('G'), GuiItems.compItem(Material.COMPARATOR, player.lang("menu.globalName"), listOf(
+                player.lang("menu.globalLore"),
+                Component.empty(),
+                player.lang("common.clickOpen")
+            )))
+            set(getSlot('L'), GuiItems.compItem(Material.COMPASS, player.lang("menu.infoName")))
 
             handLocked(true)
         }

@@ -5,10 +5,16 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
 import taboolib.module.ui.type.Chest
+import taboolib.module.ui.type.PageableChest
 import java.io.File
 
 /**
@@ -16,6 +22,8 @@ import java.io.File
  * 4 pages covering all settings.
  */
 object DungeonSettings {
+
+    private val mm = MiniMessage.miniMessage()
 
     private const val PREV_PAGE = 0
     private const val NEXT_PAGE = 8
@@ -35,7 +43,7 @@ object DungeonSettings {
         val data = session.currentData ?: return
         val dungeonName = session.dungeonName ?: return
         val titles = listOf("Display & Map", "Gameplay", "Death & Environment", "Rewards & Misc")
-        val title = "§8[${page + 1}/${titles.size}] ${titles[page]}"
+        val title = player.langStr("title.settings", (page + 1).toString(), titles.size.toString(), player.langStr("settings.page${page + 1}"))
 
         player.openMenu<Chest>(title) {
             rows(6)
@@ -43,13 +51,13 @@ object DungeonSettings {
             set('#', GuiItems.border())
 
             // Navigation row
-            set(NEXT_PAGE, if (page < titles.size - 1) GuiItems.namedItem(Material.SPECTRAL_ARROW, "<white>Next →") else GuiItems.border())
-            set(PREV_PAGE, if (page > 0) GuiItems.namedItem(Material.SPECTRAL_ARROW, "<white>← Prev") else GuiItems.border())
+            set(NEXT_PAGE, if (page < titles.size - 1) GuiItems.compItem(Material.SPECTRAL_ARROW, player.lang("settings.next")) else GuiItems.border())
+            set(PREV_PAGE, if (page > 0) GuiItems.compItem(Material.SPECTRAL_ARROW, player.lang("settings.prev")) else GuiItems.border())
 
             when (page) {
                 0 -> renderPage1(data)
                 1 -> renderPage2(data)
-                2 -> renderPage3(data)
+                2 -> renderPage3(player, data)
                 3 -> renderPage4(data)
             }
 
@@ -65,7 +73,7 @@ object DungeonSettings {
                         session.dirty = false
                         YamlIO.saveYaml(YamlIO.dungeonFile(dungeonName, "", "option.yml"), data)
                         KAngelDungeon.reloadCustomConfig(async = true)
-                        player.sendMessage("§aDungeon settings saved!")
+                        player.langMsg("settings.saved")
                         showPage(player, page)
                     }
                     BACK -> CategoryMenu.open(player, dungeonName)
@@ -151,7 +159,7 @@ object DungeonSettings {
 
     // ==================== Page 3: Death & Environment ====================
 
-    private fun Chest.renderPage3(data: MutableMap<String, Any?>) {
+    private fun Chest.renderPage3(player: Player, data: MutableMap<String, Any?>) {
         val gameplay = getSection(data, "gameplay")
         val general = getSection(gameplay, "general")
         val death = getSection(general, "death")
@@ -183,9 +191,21 @@ object DungeonSettings {
         setField(28, Material.OAK_SIGN, "visual.completeTitle", visual["completeTitle"])
         setField(29, Material.OAK_SIGN, "visual.failTitle", visual["failTitle"])
 
-        // Script placeholders
-        set(31, GuiItems.scriptPlaceholder("agent (lifecycle hooks)"))
-        set(32, GuiItems.scriptPlaceholder("join-requirements (items/permissions)"))
+        // Lifecycle agent hooks (editable JS scripts)
+        val agentSection = getSection(data, "agent")
+        val agentCount = agentSection.size
+        set(31, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("field.lifecycleAgents"), listOf(
+            player.lang("field.lifecycleCount", agentCount.toString()),
+            Component.empty(),
+            player.lang("common.clickManage")
+        )))
+        set(32, GuiItems.compItem(Material.BARRIER, player.lang("field.joinRequirements"), listOf(
+            player.lang("script.line1"),
+            player.lang("script.line2"),
+            Component.empty(),
+            player.lang("script.line3"),
+            player.lang("script.line4")
+        )))
         set(33, GuiItems.fieldItem(Material.IRON_INGOT, "join-requirements.minLevel", getSection(data, "join-requirements")["minLevel"]))
         set(34, GuiItems.fieldItem(Material.GOLD_INGOT, "join-requirements.requiredMoney", getSection(data, "join-requirements")["requiredMoney"]))
         set(35, GuiItems.fieldItem(Material.PAPER, "join-requirements.requiredPermissions", getSection(data, "join-requirements")["requiredPermissions"]))
@@ -347,6 +367,7 @@ object DungeonSettings {
             27 -> text(player, "Start Title", visual["startTitle"] as? String) { visual["startTitle"] = it; r() }
             28 -> text(player, "Complete Title", visual["completeTitle"] as? String) { visual["completeTitle"] = it; r() }
             29 -> text(player, "Fail Title", visual["failTitle"] as? String) { visual["failTitle"] = it; r() }
+            31 -> openLifecycleAgentsEditor(player, data)
             33 -> number(player, "Min Level", jr["minLevel"] as? Number) { jr["minLevel"] = it.toInt(); r() }
             34 -> number(player, "Required Money", jr["requiredMoney"] as? Number) { jr["requiredMoney"] = it.toDouble(); r() }
             35 -> listInput(player, "Required Permissions", jr["requiredPermissions"] as? List<String>) { jr["requiredPermissions"] = it; r() }
@@ -388,6 +409,55 @@ object DungeonSettings {
             36 -> toggle(dc, "enabled", r)
             37 -> text(player, "Chat Format", dc["format"] as? String) { dc["format"] = it; r() }
             38 -> text(player, "Chat Command Alias", dc["commandAlias"] as? String) { dc["commandAlias"] = it; r() }
+        }
+    }
+
+    // ==================== Lifecycle Agent Editor ====================
+
+    private val LIFECYCLE_HOOKS = listOf("onStart", "onComplete", "onFail", "onLeave", "onLeaveFail")
+
+    private fun openLifecycleAgentsEditor(player: Player, data: MutableMap<String, Any?>) {
+        val agent = getSection(data, "agent")
+
+        player.openMenu<PageableChest<String>>(player.langStr("title.lifecycleAgents")) {
+            rows(6)
+            map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#########")
+            slotsBy('@')
+            set('#', GuiItems.border())
+
+            elements { LIFECYCLE_HOOKS }
+
+            onGenerate { _, hook, _, _ ->
+                @Suppress("UNCHECKED_CAST")
+                val hookSection = (agent[hook] as? Map<String, Any?>) ?: emptyMap()
+                val gjs = hookSection["gjs"] as? String ?: ""
+                val lore = mutableListOf<Component>()
+                if (gjs.isNotEmpty()) {
+                    val preview = if (gjs.length > 40) gjs.take(40) + "..." else gjs
+                    lore.add(mm.deserialize("<gray>JS: <white>$preview"))
+                } else {
+                    lore.add(player.lang("field.lifecycleNoScript"))
+                }
+                lore.add(Component.empty())
+                lore.add(player.lang("field.lifecycleClickEdit"))
+                GuiItems.compItem(Material.COMMAND_BLOCK, mm.deserialize("<yellow>$hook</yellow>"), lore)
+            }
+
+            onClick { _, hook ->
+                @Suppress("UNCHECKED_CAST")
+                var hookSection = agent[hook] as? MutableMap<String, Any?>
+                if (hookSection == null) {
+                    hookSection = linkedMapOf<String, Any?>("trigger" to "ONCE")
+                    agent[hook] = hookSection
+                }
+                val currentJs = hookSection["gjs"] as? String ?: ""
+                InputPrompts.multilineInput(player, "$hook JS", currentJs) { js ->
+                    hookSection["gjs"] = js
+                    openLifecycleAgentsEditor(player, data)
+                }
+            }
+
+            handLocked(true)
         }
     }
 

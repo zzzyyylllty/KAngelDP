@@ -5,6 +5,11 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -39,7 +44,7 @@ object LootEditor {
             }
         }
 
-        val title = if (mode == "global") "§8Global Loot Chests" else "§8Loot Chests: $identifier"
+        val title = if (mode == "global") player.langStr("title.lootGlobal") else player.langStr("title.lootList", identifier)
 
         player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>(title) {
             rows(6)
@@ -51,15 +56,18 @@ object LootEditor {
                 val (id, data) = entry
                 val itemsCount = (data["items"] as? List<*>)?.size ?: 0
                 val positions = (data["positions"] as? List<*>)?.size ?: 0
-                GuiItems.buildItem(Material.BARREL) {
-                    name = "<yellow>$id"
-                    lore(
-                        "<gray>Items: <white>$itemsCount entries",
-                        "<gray>Positions: <white>$positions locations",
-                        "<gray>Refresh: <white>${data["refresh"] ?: true}",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to delete"
+                GuiItems.compItem(
+                    Material.BARREL,
+                    player.lang("loot.name", id),
+                    listOf(
+                        player.lang("loot.items", itemsCount.toString()),
+                        player.lang("loot.positions", positions.toString()),
+                        player.lang("loot.refresh", (data["refresh"]?.toString() ?: "true")),
+                        Component.empty(),
+                        player.lang("common.clickEdit"),
+                        player.lang("common.shiftDelete")
                     )
-                }
+                )
             }
             onClick { event, entry ->
                 if (event.clickEvent().isShiftClick) {
@@ -70,7 +78,7 @@ object LootEditor {
                 } else openEditor(player, identifier, entry.key, entry.value, mode)
             }
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "Loot Chest ID", null) { id ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.lootId"), null) { id ->
                     val data = linkedMapOf<String, Any?>("positions" to emptyList<String>(), "refresh" to true, "minItems" to 1, "maxItems" to 3, "items" to emptyList<Any>())
                     openEditor(player, identifier, id, data as MutableMap<String, Any?>, mode)
                 }
@@ -90,7 +98,7 @@ object LootEditor {
         EditorSession.get(player).enterDungeon(identifier)
 
         fun render() {
-            player.openMenu<Chest>("§8Loot: $id") {
+            player.openMenu<Chest>(player.langStr("title.lootEditor", id)) {
                 rows(6)
                 map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "####S###B")
                 set('#', GuiItems.border())
@@ -103,10 +111,15 @@ object LootEditor {
                 set(14, GuiItems.fieldItem(Material.COMPASS, "frameCrateFacing", data["frameCrateFacing"] ?: "UP"))
 
                 val itemsCount = (data["items"] as? List<*>)?.size ?: 0
-                set(24, GuiItems.buildItem(Material.CHEST) {
-                    name = "<yellow>Loot Items</yellow>"
-                    lore("<gray>Count: <white>$itemsCount entries", "", "<gray><italic>Click to manage")
-                })
+                set(24, GuiItems.compItem(
+                    Material.CHEST,
+                    player.lang("loot.itemsTitle"),
+                    listOf(
+                        player.lang("loot.itemsCount", itemsCount.toString()),
+                        Component.empty(),
+                        player.lang("common.clickManage")
+                    )
+                ))
 
                 set(49, GuiItems.saveButton())
                 set(50, GuiItems.backButton())
@@ -120,7 +133,7 @@ object LootEditor {
                         13 -> InputPrompts.textInput(player, "Frame Crate ID", data["frameCrate"] as? String) { data["frameCrate"] = it; render() }
                         14 -> InputPrompts.textInput(player, "Frame Crate Facing", data["frameCrateFacing"] as? String) { data["frameCrateFacing"] = it; render() }
                         24 -> openLootItemsEditor(player, identifier, id, data, mode)
-                        49 -> { saveEntry(identifier, id, data, mode); player.sendMessage("§aSaved loot chest '$id'!"); render() }
+                        49 -> { saveEntry(identifier, id, data, mode); player.langMsg("loot.saved", id); render() }
                         50 -> openEditorList(player, identifier, mode)
                     }
                 }
@@ -134,23 +147,26 @@ object LootEditor {
         @Suppress("UNCHECKED_CAST")
         val items = (parentData["items"] as? MutableList<Map<String, Any?>>)?.toMutableList() ?: mutableListOf()
 
-        player.openMenu<PageableChest<Map<String, Any?>>>("§8Loot Items") {
+        player.openMenu<PageableChest<Map<String, Any?>>>(player.langStr("title.lootItems")) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
             set('#', GuiItems.border())
             elements { items.toList() }
             onGenerate { _, item, _, _ ->
-                GuiItems.buildItem(Material.DIAMOND) {
-                    name = "<yellow>${item["material"] ?: "?"}</yellow>"
-                    lore(
-                        "<gray>Amount: <white>${item["amount"] ?: 1}",
-                        "<gray>Chance: <white>${item["chance"] ?: "-1 (weight)"}",
-                        "<gray>Weight: <white>${item["weight"] ?: 1}",
-                        "<gray>Enchants: <white>${(item["enchantments"] as? List<*>)?.joinToString(", ") ?: "none"}",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to remove"
+                GuiItems.compItem(
+                    Material.DIAMOND,
+                    MiniMessage.miniMessage().deserialize("<yellow>${item["material"] ?: "?"}</yellow>"),
+                    listOf(
+                        MiniMessage.miniMessage().deserialize("<gray>Amount: <white>${item["amount"] ?: 1}"),
+                        MiniMessage.miniMessage().deserialize("<gray>Chance: <white>${item["chance"] ?: "-1 (weight)"}"),
+                        MiniMessage.miniMessage().deserialize("<gray>Weight: <white>${item["weight"] ?: 1}"),
+                        MiniMessage.miniMessage().deserialize("<gray>Enchants: <white>${(item["enchantments"] as? List<*>)?.joinToString(", ") ?: "none"}"),
+                        Component.empty(),
+                        player.lang("common.clickEdit"),
+                        player.lang("common.shiftDelete")
                     )
-                }
+                )
             }
             onClick { event, entry ->
                 val idx = items.indexOf(entry)
@@ -178,7 +194,7 @@ object LootEditor {
         val entry = list[index].toMutableMap()
 
         fun render() {
-            player.openMenu<Chest>("§8Loot Item #$index") {
+            player.openMenu<Chest>(player.langStr("title.lootItem", index.toString())) {
                 rows(3)
                 for (i in 0..26) set(i, GuiItems.border())
 
@@ -221,5 +237,5 @@ object LootEditor {
         KAngelDungeon.reloadCustomConfig(async = true)
     }
 
-    private fun getSlot(c: Char): Int = when (c) { 'A' -> 50; 'L' -> 45; 'N' -> 53; else -> 0 }
+    private fun getSlot(c: Char): Int = when (c) { 'A' -> 49; 'L' -> 45; 'N' -> 53; else -> 0 }
 }

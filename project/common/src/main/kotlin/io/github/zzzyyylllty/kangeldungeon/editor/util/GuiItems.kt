@@ -155,6 +155,21 @@ object GuiItems {
         }
     }
 
+    // ============ Component-based Item Builder (for use with asLangText) ============
+
+    /**
+     * Build an item from Adventure Components directly.
+     * Used with [EditorLang.Player.lang] for localized items.
+     */
+    fun compItem(material: Material, name: Component, lore: List<Component> = emptyList()): ItemStack {
+        val item = ItemStack(material)
+        item.editMeta { meta ->
+            meta.displayName(name)
+            if (lore.isNotEmpty()) meta.lore(lore)
+        }
+        return item
+    }
+
     // ============ Layout Constants ============
 
     /** All border slots for a 6-row chest (slots 0-53) */

@@ -774,6 +774,13 @@ object DungeonPlayerTracker {
         // 清理旁观者追踪
         KAngelDungeon.spectatorTargets.remove(uuid)
 
+        // 清理聊天退订列表，防止内存泄漏
+        KAngelDungeon.dungeonChatOptOut.remove(uuid)
+
+        // 清理编辑器会话和聊天监听器，防止内存泄漏
+        io.github.zzzyyylllty.kangeldungeon.editor.EditorSession.remove(event.player)
+        io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts.clearPlayer(uuid)
+
         // 清理 playerToInstanceIndex，允许玩家重连后加入新地牢
         val instanceUuid = KAngelDungeon.playerToInstanceIndex.remove(uuid)
         if (instanceUuid != null) {

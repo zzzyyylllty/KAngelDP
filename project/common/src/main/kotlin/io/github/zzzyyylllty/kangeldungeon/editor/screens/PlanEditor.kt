@@ -5,6 +5,10 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -29,7 +33,7 @@ object PlanEditor {
             }
         }
 
-        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>("§8Plans: $dungeonName") {
+        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>(player.langStr("title.planList", dungeonName)) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
@@ -37,16 +41,15 @@ object PlanEditor {
             elements { allData.entries.toList() }
             onGenerate { _, entry, _, _ ->
                 val (id, data) = entry
-                GuiItems.buildItem(Material.CLOCK) {
-                    name = "<yellow>$id"
-                    lore(
-                        "<gray>Trigger: <white>${data["trigger"] ?: "?"}",
-                        "<gray>Delay: <white>${data["delay"] ?: "0"} ticks",
-                        "<gray>Period: <white>${data["period"] ?: "once"}",
-                        "<gray>Async: <white>${data["async"] ?: false}",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to delete"
-                    )
-                }
+                GuiItems.compItem(Material.CLOCK, player.lang("plan.name", id), listOf(
+                    player.lang("plan.trigger", data["trigger"] ?: "?"),
+                    player.lang("plan.delay", data["delay"] ?: "0"),
+                    player.lang("plan.period", data["period"] ?: "once"),
+                    player.lang("plan.async", data["async"] ?: false),
+                    Component.empty(),
+                    player.lang("common.clickEdit"),
+                    player.lang("common.shiftDelete")
+                ))
             }
             onClick { event, entry ->
                 if (event.clickEvent().isShiftClick) {
@@ -54,7 +57,7 @@ object PlanEditor {
                 } else openEditor(player, dungeonName, entry.key, entry.value)
             }
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "Plan ID", null) { id ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.planId"), null) { id ->
                     val data = linkedMapOf<String, Any?>("trigger" to "BEGIN", "async" to false)
                     openEditor(player, dungeonName, id, data as MutableMap<String, Any?>)
                 }
@@ -72,7 +75,7 @@ object PlanEditor {
         EditorSession.get(player).enterDungeon(dungeonName)
 
         fun render() {
-            player.openMenu<Chest>("§8Plan: $id") {
+            player.openMenu<Chest>(player.langStr("title.planEditor", id)) {
                 rows(6)
                 map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "####S###B")
                 set('#', GuiItems.border())
@@ -81,7 +84,7 @@ object PlanEditor {
                 set(10, GuiItems.numberItem("delay (ticks)", data["delay"] as? Number))
                 set(11, GuiItems.numberItem("period (ticks, 0=once)", data["period"] as? Number))
                 set(12, GuiItems.toggleItem("async", data["async"] as? Boolean ?: false))
-                set(16, GuiItems.scriptPlaceholder("agent.onRun"))
+                set(16, GuiItems.fieldItem(Material.COMMAND_BLOCK, "onRun (JS)", data["onRun"]))
 
                 set(49, GuiItems.saveButton())
                 set(50, GuiItems.backButton())
@@ -92,7 +95,8 @@ object PlanEditor {
                         10 -> InputPrompts.intInput(player, "Delay (ticks)", (data["delay"] as? Number)?.toInt()) { data["delay"] = it; render() }
                         11 -> InputPrompts.intInput(player, "Period (0=once)", (data["period"] as? Number)?.toInt()) { data["period"] = it; render() }
                         12 -> { data["async"] = !(data["async"] as? Boolean ?: false); render() }
-                        49 -> { saveEntry(dungeonName, id, data); player.sendMessage("§aSaved plan '$id'!"); render() }
+                        16 -> InputPrompts.multilineInput(player, "onRun JS", data["onRun"] as? String) { data["onRun"] = it; render() }
+                        49 -> { saveEntry(dungeonName, id, data); player.langMsg("plan.saved", id); render() }
                         50 -> openList(player, dungeonName)
                     }
                 }
@@ -112,5 +116,5 @@ object PlanEditor {
         KAngelDungeon.reloadCustomConfig(async = true)
     }
 
-    private fun getSlot(c: Char): Int = when (c) { 'A' -> 50; 'L' -> 45; 'N' -> 53; else -> 0 }
+    private fun getSlot(c: Char): Int = when (c) { 'A' -> 49; 'L' -> 45; 'N' -> 53; else -> 0 }
 }

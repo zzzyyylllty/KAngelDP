@@ -22,6 +22,9 @@ object PlayerStatsManager {
     /** 内存缓存：playerUUID -> PlayerStats，加速频繁读取 */
     private val statsCache = ConcurrentHashMap<UUID, PlayerStats>()
 
+    /** statsCache 最大条目数，超出时触发清理 */
+    private const val STATS_CACHE_MAX_SIZE = 5000
+
     /** SQLite 连接锁（Connection 非线程安全） */
     private val dbLock = Any()
 
@@ -82,14 +85,29 @@ object PlayerStatsManager {
         } catch (_: Exception) {}
     }
 
+    /** 清理缓存中最早的一半条目，防止无限增长 */
+    private fun evictCacheIfNeeded() {
+        if (statsCache.size > STATS_CACHE_MAX_SIZE) {
+            val iter = statsCache.entries.iterator()
+            var removed = 0
+            val target = STATS_CACHE_MAX_SIZE / 2
+            while (iter.hasNext() && removed < target) {
+                iter.next()
+                iter.remove()
+                removed++
+            }
+        }
+    }
+
     /**
      * 获取玩家统计（先查缓存，再查 DB）
      */
     fun getStats(playerUUID: UUID): PlayerStats {
         statsCache[playerUUID]?.let { return it }
-        return loadFromDatabase(playerUUID) ?: PlayerStats(playerUUID = playerUUID).also {
-            statsCache[playerUUID] = it
-        }
+        val stats = loadFromDatabase(playerUUID) ?: PlayerStats(playerUUID = playerUUID)
+        statsCache[playerUUID] = stats
+        evictCacheIfNeeded()
+        return stats
     }
 
     /**

@@ -16,7 +16,7 @@
 
 ### `ObstacleManager.prepareObstacle(instance, config)`
 
-准备障碍物（预先保存方块状态、预留位置）。
+准备障碍物（预先保存方块状态、预留位置）。触发 `onPrepare` JS 代理。
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
@@ -25,11 +25,16 @@
 
 **返回值**: `Boolean` — 是否成功准备
 
+```js
+// 在 PREPARE 阶段的 plan 中预加载障碍物
+ObstacleManager.prepareObstacle(instance, config);
+```
+
 ---
 
 ### `ObstacleManager.activateObstacle(instance, config)`
 
-激活障碍物（关闭栅栏门，放置方块阻挡玩家）。
+激活障碍物（关闭栅栏门，放置方块阻挡玩家）。触发 `onStart` JS 代理。
 支持 `openDelaySeconds` 延迟激活和 `activeDurationSeconds` 自动关闭。
 
 | 参数 | 类型 | 说明 |
@@ -38,6 +43,10 @@
 | `config` | `ObstacleConfig` | 障碍物配置 |
 
 **返回值**: `Boolean` — 是否成功激活
+
+```js
+ObstacleManager.activateObstacle(instance, config);
+```
 
 ---
 
@@ -52,27 +61,61 @@
 
 **返回值**: `Boolean` — 是否成功打开
 
----
+```js
+// 清除所有怪物后开门
+ObstacleManager.openObstacle(instance, config);
+```
 
 ### `ObstacleManager.openObstacleForce(instance, config)`
 
 强制打开障碍物（跳过已开启检查）。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `instance` | `DungeonInstance` | 地牢实例 |
-| `config` | `ObstacleConfig` | 障碍物配置 |
-
-**返回值**: `Boolean` — 是否成功打开
+```js
+ObstacleManager.openObstacleForce(instance, config);
+```
 
 ---
 
 ### `ObstacleManager.restoreBlocks(instance)`
 
-恢复已保存的方块状态（彻底清理障碍物）。
+恢复已保存的方块状态（彻底清理障碍物）。地牢结束时自动调用。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `instance` | `DungeonInstance` | 地牢实例 |
+```js
+ObstacleManager.restoreBlocks(instance);
+```
 
-**返回值**: 无
+---
+
+## 常见用法
+
+**Boss 战锁门**:
+```js
+// onStart 阶段 — 锁门
+ObstacleManager.activateObstacle(instance, bossRoomConfig);
+
+// onAllKilled — 开门
+ObstacleManager.openObstacle(instance, bossRoomConfig);
+```
+
+**分段关卡**:
+```js
+var wave = instance.getMetaAsInt("wave");
+switch (wave) {
+    case 1:
+        ObstacleManager.activateObstacle(instance, gate1);
+        break;
+    case 2:
+        ObstacleManager.openObstacle(instance, gate1);
+        ObstacleManager.activateObstacle(instance, gate2);
+        break;
+    case 3:
+        ObstacleManager.openObstacle(instance, gate2);
+        break;
+}
+```
+
+**强制重置**:
+```js
+// 用于管理指令或故障恢复
+ObstacleManager.openObstacleForce(instance, stuckGate);
+```

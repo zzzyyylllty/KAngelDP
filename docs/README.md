@@ -98,6 +98,7 @@ agent:
 | [命令参考](commands.md) | 全部 70+ 条命令的完整参考 |
 | [配置文件](configuration.md) | 所有 YAML 配置文件格式 |
 | [JS API 参考](js-api.md) | DungeonInstance 全部 150+ 个 JS 方法 |
+| [JS Agent 钩子](js-agent-hooks.md) | 全部可编辑 JS 脚本字段（含示例） |
 | [Kether 动作](kether-actions.md) | `kangeldp` 前缀的 Kether 脚本动作 |
 | [事件系统](events.md) | 全部自定义事件（40+ 个） |
 | [任务系统](task-system.md) | TaskConfig 触发器与过滤 |

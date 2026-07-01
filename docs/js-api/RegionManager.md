@@ -16,7 +16,12 @@
 | `playerUUID` | `UUID` | 玩家 UUID |
 | `regionId` | `String` | 区域配置 ID |
 
-**返回值**: `Boolean` — 是否在区域内
+```js
+var inZone = RegionManager.isPlayerInRegion(instance.worldName, player.getUniqueId(), "danger_zone");
+if (inZone) {
+    PlayerUtil.sendMessage(player, "<red>你处于危险区域！");
+}
+```
 
 ---
 
@@ -29,7 +34,12 @@
 | `worldName` | `String` | 地牢世界名称 |
 | `regionId` | `String` | 区域配置 ID |
 
-**返回值**: `List<Player>` — 区域内的在线玩家列表
+```js
+var inRoom = RegionManager.getPlayersInRegion(instance.worldName, "boss_room");
+inRoom.forEach(function(p) {
+    PlayerUtil.sendTitle(p, "<red>⚔ Boss 战</red>", "", 10, 30, 10);
+});
+```
 
 ---
 
@@ -37,12 +47,12 @@
 
 获取玩家当前所在的所有区域 ID。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `worldName` | `String` | 地牢世界名称 |
-| `playerUUID` | `UUID` | 玩家 UUID |
-
-**返回值**: `Set<String>` — 区域 ID 集合
+```js
+var regions = RegionManager.getPlayerRegions(instance.worldName, player.getUniqueId());
+regions.forEach(function(rid) {
+    Sys.println("玩家在区域: " + rid);
+});
+```
 
 ---
 
@@ -50,8 +60,33 @@
 
 清理指定世界的区域追踪数据（触发所有玩家离开事件）。
 
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `worldName` | `String` | 地牢世界名称 |
+```js
+RegionManager.clearWorld(instance.worldName);
+```
 
-**返回值**: 无
+---
+
+## 常见用法
+
+**检查玩家是否在安全区**:
+```js
+var inSafe = RegionManager.isPlayerInRegion(instance.worldName, player.getUniqueId(), "safe_zone");
+if (!inSafe) {
+    PlayerUtil.damage(player, 2.0);  // 在非安全区持续掉血
+}
+```
+
+**区域计数**:
+```js
+var count = RegionManager.getPlayersInRegion(instance.worldName, "puzzle_room").length;
+if (count >= 2) {
+    // 至少 2 人在解谜室时才触发
+}
+```
+
+**离开区域触发事件**:
+```js
+// 在 onLeave 代理脚本中:
+PlayerUtil.sendMessage(player, "<yellow>你离开了安全区！");
+PlayerUtil.addPotionEffect(player, "POISON", 100, 1);
+```

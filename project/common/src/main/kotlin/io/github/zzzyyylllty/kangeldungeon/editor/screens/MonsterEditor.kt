@@ -5,6 +5,10 @@ import io.github.zzzyyylllty.kangeldungeon.editor.EditorSession
 import io.github.zzzyyylllty.kangeldungeon.editor.util.GuiItems
 import io.github.zzzyyylllty.kangeldungeon.editor.util.InputPrompts
 import io.github.zzzyyylllty.kangeldungeon.editor.util.YamlIO
+import io.github.zzzyyylllty.kangeldungeon.editor.util.lang
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langMsg
+import io.github.zzzyyylllty.kangeldungeon.editor.util.langStr
+import net.kyori.adventure.text.Component
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import taboolib.module.ui.openMenu
@@ -27,7 +31,7 @@ object MonsterEditor {
             }
         }
 
-        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>("§8Monsters: $dungeonName") {
+        player.openMenu<PageableChest<Map.Entry<String, MutableMap<String, Any?>>>>(player.langStr("title.monsterList", dungeonName)) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
@@ -36,15 +40,15 @@ object MonsterEditor {
             onGenerate { _, entry, _, _ ->
                 val (id, data) = entry
                 val monsters = (data["monsters"] as? List<*>)?.size ?: 0
-                GuiItems.buildItem(Material.ZOMBIE_HEAD) {
-                    name = "<yellow>$id"
-                    lore(
-                        "<gray>Active: <${if (data["active"] != false) "green" else "red"}>${data["active"] ?: true}",
-                        "<gray>Monsters: <white>$monsters entries",
-                        "<gray>Priority: <white>${data["priority"] ?: 0}",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to delete"
-                    )
-                }
+                val activeStr = if (data["active"] != false) "<green>${data["active"] ?: true}" else "<red>${data["active"] ?: true}"
+                GuiItems.compItem(Material.ZOMBIE_HEAD, player.lang("monster.name", id), listOf(
+                    player.lang("monster.active", activeStr),
+                    player.lang("common.entries", monsters.toString()),
+                    player.lang("monster.priority", (data["priority"] ?: 0).toString()),
+                    Component.empty(),
+                    player.lang("common.clickEdit"),
+                    player.lang("common.shiftDelete")
+                ))
             }
             onClick { event, entry ->
                 if (event.clickEvent().isShiftClick) {
@@ -52,7 +56,7 @@ object MonsterEditor {
                 } else openEditor(player, dungeonName, entry.key, entry.value)
             }
             onClick(getSlot('A')) {
-                InputPrompts.textInput(player, "Monster Group ID", null) { id ->
+                InputPrompts.textInput(player, player.langStr("inputTitle.monsterId"), null) { id ->
                     val data = linkedMapOf<String, Any?>("active" to true, "monsters" to emptyList<Any>())
                     openEditor(player, dungeonName, id, data as MutableMap<String, Any?>)
                 }
@@ -70,7 +74,7 @@ object MonsterEditor {
         EditorSession.get(player).enterDungeon(dungeonName)
 
         fun render() {
-            player.openMenu<Chest>("§8Monster: $id") {
+            player.openMenu<Chest>(player.langStr("title.monsterEditor", id)) {
                 rows(6)
                 map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "####S###B")
                 set('#', GuiItems.border())
@@ -88,19 +92,46 @@ object MonsterEditor {
                 set(19, GuiItems.numberItem("activationRangeMax (-1=∞)", data["activationRangeMax"] as? Number))
                 set(20, GuiItems.numberItem("leashRange (0=off)", data["leashRange"] as? Number))
 
-                set(24, GuiItems.scriptPlaceholder("spawnCondition"))
-                set(25, GuiItems.scriptPlaceholder("respawnCondition"))
+                @Suppress("UNCHECKED_CAST")
+                val monsterAgent = (data.getOrPut("agent") { linkedMapOf<String, Any?>() } as MutableMap<String, Any?>)
+                set(24, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", data["spawnCondition"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(25, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", data["respawnCondition"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
 
                 val monsters = (data["monsters"] as? List<*>)?.size ?: 0
-                set(27, GuiItems.buildItem(Material.ZOMBIE_SPAWN_EGG) {
-                    name = "<yellow>Monster Spawn Entries</yellow>"
-                    lore("<gray>Count: <white>$monsters", "", "<gray><italic>Click to manage")
-                })
+                set(27, GuiItems.compItem(Material.ZOMBIE_SPAWN_EGG, player.lang("monster.spawnEntries"), listOf(
+                    player.lang("monster.spawnCount", monsters.toString()),
+                    Component.empty(),
+                    player.lang("common.clickManage")
+                )))
 
-                set(34, GuiItems.scriptPlaceholder("agent.onSpawn"))
-                set(35, GuiItems.scriptPlaceholder("agent.onAllKilled"))
-                set(36, GuiItems.scriptPlaceholder("agent.onRespawn"))
-                set(37, GuiItems.scriptPlaceholder("agent.onEachKill"))
+                set(34, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", monsterAgent["onSpawn"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(35, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", monsterAgent["onAllKilled"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(36, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", monsterAgent["onRespawn"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(37, GuiItems.compItem(Material.COMMAND_BLOCK, player.lang("inputTitle.agentScript"), listOf(
+                    player.lang("field.current", monsterAgent["onEachKill"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
 
                 set(49, GuiItems.saveButton())
                 set(50, GuiItems.backButton())
@@ -108,18 +139,24 @@ object MonsterEditor {
                 onClick(lock = true) { event ->
                     when (event.rawSlot) {
                         9 -> { data["active"] = !(data["active"] as? Boolean ?: true); render() }
-                        10 -> InputPrompts.intInput(player, "Priority", (data["priority"] as? Number)?.toInt()) { data["priority"] = it; render() }
+                        10 -> InputPrompts.intInput(player, player.langStr("inputTitle.priority"), (data["priority"] as? Number)?.toInt()) { data["priority"] = it; render() }
                         11 -> InputPrompts.intInput(player, "Respawn Cooldown (ticks)", (data["respawnCooldown"] as? Number)?.toInt()) { data["respawnCooldown"] = it; render() }
                         12 -> InputPrompts.intInput(player, "Spawn Delay (ticks)", (data["spawnDelay"] as? Number)?.toInt()) { data["spawnDelay"] = it; render() }
                         13 -> InputPrompts.intInput(player, "Spawn Interval (ticks)", (data["spawnInterval"] as? Number)?.toInt()) { data["spawnInterval"] = it; render() }
-                        14 -> InputPrompts.intInput(player, "Max Respawns", (data["maxRespawns"] as? Number)?.toInt()) { data["maxRespawns"] = it; render() }
+                        14 -> InputPrompts.intInput(player, player.langStr("inputTitle.maxRespawns"), (data["maxRespawns"] as? Number)?.toInt()) { data["maxRespawns"] = it; render() }
                         15 -> InputPrompts.doubleInput(player, "Health Multiplier", (data["healthMultiplier"] as? Number)?.toDouble()) { data["healthMultiplier"] = it; render() }
                         16 -> InputPrompts.doubleInput(player, "Damage Multiplier", (data["damageMultiplier"] as? Number)?.toDouble()) { data["damageMultiplier"] = it; render() }
                         18 -> InputPrompts.doubleInput(player, "Activation Range Min", (data["activationRangeMin"] as? Number)?.toDouble()) { data["activationRangeMin"] = it; render() }
                         19 -> InputPrompts.doubleInput(player, "Activation Range Max", (data["activationRangeMax"] as? Number)?.toDouble()) { data["activationRangeMax"] = it; render() }
                         20 -> InputPrompts.doubleInput(player, "Leash Range", (data["leashRange"] as? Number)?.toDouble()) { data["leashRange"] = it; render() }
+                        24 -> InputPrompts.multilineInput(player, "spawnCondition JS", data["spawnCondition"] as? String) { data["spawnCondition"] = it; render() }
+                        25 -> InputPrompts.multilineInput(player, "respawnCondition JS", data["respawnCondition"] as? String) { data["respawnCondition"] = it; render() }
                         27 -> openSpawnEntries(player, data, id)
-                        49 -> { saveEntry(dungeonName, id, data); player.sendMessage("§aSaved monster '$id'!"); render() }
+                        34 -> InputPrompts.multilineInput(player, "onSpawn JS", monsterAgent["onSpawn"] as? String) { monsterAgent["onSpawn"] = it; render() }
+                        35 -> InputPrompts.multilineInput(player, "onAllKilled JS", monsterAgent["onAllKilled"] as? String) { monsterAgent["onAllKilled"] = it; render() }
+                        36 -> InputPrompts.multilineInput(player, "onRespawn JS", monsterAgent["onRespawn"] as? String) { monsterAgent["onRespawn"] = it; render() }
+                        37 -> InputPrompts.multilineInput(player, "onEachKill JS", monsterAgent["onEachKill"] as? String) { monsterAgent["onEachKill"] = it; render() }
+                        49 -> { saveEntry(dungeonName, id, data); player.langMsg("monster.saved", id); render() }
                         50 -> openList(player, dungeonName)
                     }
                 }
@@ -133,23 +170,22 @@ object MonsterEditor {
         @Suppress("UNCHECKED_CAST")
         val entries = (parentData["monsters"] as? MutableList<Map<String, Any?>>)?.toMutableList() ?: mutableListOf()
 
-        player.openMenu<PageableChest<Map<String, Any?>>>("§8Spawn Entries") {
+        player.openMenu<PageableChest<Map<String, Any?>>>(player.langStr("title.spawnEntries")) {
             rows(6)
             map("#########", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "#@@@@@@@#", "L###A###N")
             slotsBy('@')
             set('#', GuiItems.border())
             elements { entries.toList() }
             onGenerate { _, entry, _, _ ->
-                GuiItems.buildItem(Material.ZOMBIE_SPAWN_EGG) {
-                    name = "<yellow>${entry["mob"] ?: "unknown"}</yellow>"
-                    lore(
-                        "<gray>Location: <white>${entry["location"] ?: "?"}",
-                        "<gray>Amount: <white>${entry["amount"] ?: 1}",
-                        "<gray>Scatter: <white>${entry["scattered"] ?: 0}",
-                        "<gray>Level: <white>${entry["level"] ?: 0}",
-                        "", "<gray><italic>Click to edit", "<red><italic>Shift+Click to remove"
-                    )
-                }
+                GuiItems.compItem(Material.ZOMBIE_SPAWN_EGG, player.lang("monster.name", entry["mob"] ?: "unknown"), listOf(
+                    player.lang("spawn.location", entry["location"]?.toString() ?: "?"),
+                    player.lang("spawn.amount", (entry["amount"] ?: 1).toString()),
+                    player.lang("spawn.scatter", (entry["scattered"] ?: 0).toString()),
+                    player.lang("spawn.level", (entry["level"] ?: 0).toString()),
+                    Component.empty(),
+                    player.lang("common.clickEdit"),
+                    player.lang("common.shiftDelete")
+                ))
             }
             onClick { event, entry ->
                 val idx = entries.indexOf(entry)
@@ -177,26 +213,67 @@ object MonsterEditor {
 
     private fun editSpawnEntry(player: Player, list: MutableList<Map<String, Any?>>, index: Int, parentData: MutableMap<String, Any?>, monsterId: String) {
         val entry = list[index].toMutableMap()
+        val session = EditorSession.get(player)
 
         fun render() {
-            player.openMenu<Chest>("§8Spawn Entry #$index") {
+            player.openMenu<Chest>(player.langStr("title.spawnEntry", index.toString())) {
                 rows(3)
                 for (i in 0..26) set(i, GuiItems.border())
 
-                set(10, GuiItems.fieldItem(Material.ZOMBIE_HEAD, "mob", entry["mob"]))
-                set(11, GuiItems.fieldItem(Material.COMPASS, "location (x y z)", entry["location"]))
-                set(12, GuiItems.fieldItem(Material.OAK_SIGN, "amount", entry["amount"]))
-                set(13, GuiItems.fieldItem(Material.FIREWORK_ROCKET, "scattered", entry["scattered"]))
+                set(10, GuiItems.compItem(Material.ZOMBIE_HEAD, player.lang("inputTitle.mobType"), listOf(
+                    player.lang("field.current", entry["mob"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(11, GuiItems.compItem(Material.COMPASS, player.lang("inputTitle.location"), listOf(
+                    player.lang("field.current", entry["location"]?.toString() ?: "none"),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(12, GuiItems.compItem(Material.OAK_SIGN, player.lang("inputTitle.amount"), listOf(
+                    player.lang("field.current", (entry["amount"] ?: 1).toString()),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(13, GuiItems.compItem(Material.FIREWORK_ROCKET, player.lang("inputTitle.scatter"), listOf(
+                    player.lang("field.current", (entry["scattered"] ?: 0).toString()),
+                    Component.empty(),
+                    player.lang("field.clickEdit")
+                )))
+                set(14, GuiItems.compItem(Material.TARGET, player.lang("loc.currentPos"), listOf(
+                    player.lang("loc.currentPosLore")
+                )))
+                set(15, GuiItems.compItem(Material.LEVER, player.lang("loc.pickBlock"), listOf(
+                    player.lang("loc.pickBlockLore"),
+                    player.lang("loc.pickBlockLore2")
+                )))
 
                 set(22, GuiItems.saveButton())
                 set(24, GuiItems.backButton())
 
                 onClick(lock = true) { event ->
                     when (event.rawSlot) {
-                        10 -> InputPrompts.textInput(player, "Mob type", entry["mob"] as? String) { entry["mob"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
-                        11 -> InputPrompts.textInput(player, "Location (x y z)", entry["location"] as? String) { entry["location"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
-                        12 -> InputPrompts.intInput(player, "Amount", (entry["amount"] as? Number)?.toInt()) { entry["amount"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
-                        13 -> InputPrompts.intInput(player, "Scatter radius", (entry["scattered"] as? Number)?.toInt()) { entry["scattered"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
+                        10 -> InputPrompts.textInput(player, player.langStr("inputTitle.mobType"), entry["mob"] as? String) { entry["mob"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
+                        11 -> InputPrompts.textInput(player, player.langStr("inputTitle.location"), entry["location"] as? String) { entry["location"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
+                        12 -> InputPrompts.intInput(player, player.langStr("inputTitle.amount"), (entry["amount"] as? Number)?.toInt()) { entry["amount"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
+                        13 -> InputPrompts.intInput(player, player.langStr("inputTitle.scatter"), (entry["scattered"] as? Number)?.toInt()) { entry["scattered"] = it; list[index] = entry; parentData["monsters"] = list.toMutableList(); render() }
+                        14 -> {
+                            entry["location"] = session.formatPos(player.location)
+                            list[index] = entry
+                            parentData["monsters"] = list.toMutableList()
+                            player.langMsg("loc.set")
+                            render()
+                        }
+                        15 -> {
+                            session.wandCallback = { loc ->
+                                entry["location"] = session.formatPos(loc)
+                                list[index] = entry
+                                parentData["monsters"] = list.toMutableList()
+                                render()
+                            }
+                            player.closeInventory()
+                            player.langMsg("loc.pickHint")
+                        }
                         22 -> { parentData["monsters"] = list.toMutableList(); openSpawnEntries(player, parentData, monsterId) }
                         24 -> openSpawnEntries(player, parentData, monsterId)
                     }
@@ -217,5 +294,5 @@ object MonsterEditor {
         KAngelDungeon.reloadCustomConfig(async = true)
     }
 
-    private fun getSlot(c: Char): Int = when (c) { 'A' -> 50; 'L' -> 45; 'N' -> 53; else -> 0 }
+    private fun getSlot(c: Char): Int = when (c) { 'A' -> 49; 'L' -> 45; 'N' -> 53; else -> 0 }
 }

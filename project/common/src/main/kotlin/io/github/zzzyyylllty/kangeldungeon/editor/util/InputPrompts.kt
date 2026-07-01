@@ -39,7 +39,7 @@ object InputPrompts {
                 if (input.isNotEmpty()) {
                     callback(input)
                 } else {
-                    player.sendMessage("§cInput cannot be empty!")
+                    player.langMsg("input.invalidEmpty")
                 }
             }
         }
@@ -62,7 +62,7 @@ object InputPrompts {
                     callback(doubleVal)
                     return@onRename
                 }
-                player.sendMessage("§cInvalid number: $input")
+                player.langMsg("input.invalidNumber", input)
             }
         }
     }
@@ -78,7 +78,7 @@ object InputPrompts {
                 if (value != null) {
                     callback(value)
                 } else {
-                    player.sendMessage("§cInvalid integer: $input")
+                    player.langMsg("input.invalidInteger", input)
                 }
             }
         }
@@ -95,7 +95,7 @@ object InputPrompts {
                 if (value != null) {
                     callback(value)
                 } else {
-                    player.sendMessage("§cInvalid number: $input")
+                    player.langMsg("input.invalidNumber", input)
                 }
             }
         }
@@ -138,8 +138,8 @@ object InputPrompts {
     fun chatInput(player: Player, title: String, callback: (String) -> Unit) {
         player.closeInventory()
         player.sendMessage("")
-        player.sendMessage("§6§l--- $title ---")
-        player.sendMessage("§7Type your input in chat.")
+        player.langMsg("input.title", title)
+        player.langMsg("input.typeChat")
         player.sendMessage("")
         chatListeners[player.uniqueId] = callback
     }
@@ -150,14 +150,14 @@ object InputPrompts {
     fun multilineInput(player: Player, title: String, current: String?, callback: (String) -> Unit) {
         player.closeInventory()
         player.sendMessage("")
-        player.sendMessage("§6§l--- $title ---")
-        player.sendMessage("§7Type your text line by line.")
-        player.sendMessage("§7Type §e#done§7 to finish.")
+        player.langMsg("input.title", title)
+        player.langMsg("input.typeLines")
+        player.langMsg("input.typeDone")
         if (current != null && current.isNotEmpty()) {
-            player.sendMessage("§7Current value:")
+            player.langMsg("input.currentValue")
             current.lines().forEach { player.sendMessage("§8$it") }
             player.sendMessage("")
-            player.sendMessage("§7Type §e#clear§7 to start fresh, or add more lines.")
+            player.langMsg("input.typeClear")
         }
         player.sendMessage("")
         multilineListeners[player.uniqueId] = MultilineCapture(
@@ -175,14 +175,14 @@ object InputPrompts {
     fun stringListInput(player: Player, title: String, current: List<String>?, callback: (List<String>) -> Unit) {
         player.closeInventory()
         player.sendMessage("")
-        player.sendMessage("§6§l--- $title ---")
-        player.sendMessage("§7Type one entry per line.")
-        player.sendMessage("§7Type §e#done§7 to finish.")
+        player.langMsg("input.title", title)
+        player.langMsg("input.typeLines")
+        player.langMsg("input.typeDone")
         if (current != null && current.isNotEmpty()) {
-            player.sendMessage("§7Current entries:")
+            player.langMsg("input.currentEntries")
             current.forEach { player.sendMessage("§8- $it") }
             player.sendMessage("")
-            player.sendMessage("§7Type §e#clear§7 to start fresh.")
+            player.langMsg("input.clearFresh")
         }
         player.sendMessage("")
         multilineListeners[player.uniqueId] = MultilineCapture(
@@ -195,16 +195,18 @@ object InputPrompts {
     /**
      * Confirm/cancel dialog.
      */
-    fun confirmDialog(player: Player, title: String, message: String, onConfirm: () -> Unit) {
+    fun confirmDialog(player: Player, title: String, message: Component, onConfirm: () -> Unit) {
         player.openMenu<Chest>(title) {
             rows(3)
-            set(11, GuiItems.buildItem(Material.LIME_DYE) {
-                name = "<green>✔ Confirm"
-                lore("<gray>$message")
-            })
-            set(15, GuiItems.buildItem(Material.RED_DYE) {
-                name = "<red>✘ Cancel"
-            })
+            set(11, GuiItems.compItem(
+                Material.LIME_DYE,
+                player.lang("common.save"),
+                listOf(message)
+            ))
+            set(15, GuiItems.compItem(
+                Material.RED_DYE,
+                player.lang("editor.common.cancel")
+            ))
             onClick(lock = true) { event ->
                 when (event.rawSlot) {
                     11 -> {
@@ -220,6 +222,14 @@ object InputPrompts {
 
     // ============ Event Listener ============
 
+    /**
+     * 清理指定玩家的所有待处理输入监听器（玩家退出时调用）
+     */
+    fun clearPlayer(uuid: UUID) {
+        chatListeners.remove(uuid)
+        multilineListeners.remove(uuid)
+    }
+
     @SubscribeEvent
     fun onChat(event: org.bukkit.event.player.AsyncPlayerChatEvent) {
         val uuid = event.player.uniqueId
@@ -232,22 +242,22 @@ object InputPrompts {
             if (message.equals("#done", ignoreCase = true)) {
                 multilineListeners.remove(uuid)
                 val result = mlCapture.lines.joinToString("\n")
-                event.player.sendMessage("§aInput captured! (${mlCapture.lines.size} lines)")
+                event.player.langMsg("input.captured", mlCapture.lines.size.toString())
                 mlCapture.callback(result)
                 return
             }
             if (message.equals("#clear", ignoreCase = true)) {
                 mlCapture.lines.clear()
-                event.player.sendMessage("§eCleared! Type new lines or #done to finish.")
+                event.player.langMsg("input.cleared")
                 return
             }
             if (message.equals("#cancel", ignoreCase = true) || message.equals("#exit", ignoreCase = true)) {
                 multilineListeners.remove(uuid)
-                event.player.sendMessage("§cCancelled.")
+                event.player.langMsg("input.cancelled")
                 return
             }
             mlCapture.lines.add(message)
-            event.player.sendMessage("§7Line added (${mlCapture.lines.size} total). Type §e#done§7 to finish.")
+            event.player.langMsg("input.lineAdded", mlCapture.lines.size.toString())
             return
         }
 
@@ -257,10 +267,10 @@ object InputPrompts {
             event.isCancelled = true
             chatListeners.remove(uuid)
             if (message.equals("#cancel", ignoreCase = true) || message.equals("#exit", ignoreCase = true)) {
-                event.player.sendMessage("§cCancelled.")
+                event.player.langMsg("input.cancelled")
                 return
             }
-            event.player.sendMessage("§aInput captured!")
+            event.player.langMsg("input.captured", "1")
             listener(message)
         }
     }

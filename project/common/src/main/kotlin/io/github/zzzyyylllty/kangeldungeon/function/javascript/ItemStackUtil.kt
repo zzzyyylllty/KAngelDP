@@ -291,4 +291,108 @@ object ItemStackUtil {
         clone.itemMeta = meta
         return clone
     }
+
+    // ==================== 数量 ====================
+
+    /**
+     * 设置物品数量（返回新物品）
+     * JS: ItemStackUtil.setAmount(itemStack, 10)
+     */
+    fun setAmount(itemStack: ItemStack, amount: Int): ItemStack {
+        val clone = itemStack.clone()
+        clone.amount = amount.coerceAtLeast(1)
+        return clone
+    }
+
+    // ==================== 附魔 ====================
+
+    /**
+     * 添加附魔（返回新物品）
+     * JS: ItemStackUtil.addEnchantment(itemStack, "SHARPNESS", 5)
+     */
+    fun addEnchantment(itemStack: ItemStack, enchantment: String, level: Int = 1): ItemStack {
+        val clone = itemStack.clone()
+        val ench = org.bukkit.enchantments.Enchantment.getByKey(namespacedKey(enchantment)) ?: return clone
+        clone.addUnsafeEnchantment(ench, level.coerceAtLeast(1))
+        return clone
+    }
+
+    /**
+     * 移除附魔（返回新物品）
+     * JS: ItemStackUtil.removeEnchantment(itemStack, "SHARPNESS")
+     */
+    fun removeEnchantment(itemStack: ItemStack, enchantment: String): ItemStack {
+        val clone = itemStack.clone()
+        val ench = org.bukkit.enchantments.Enchantment.getByKey(namespacedKey(enchantment)) ?: return clone
+        clone.removeEnchantment(ench)
+        return clone
+    }
+
+    /**
+     * 检查是否有指定附魔
+     * JS: ItemStackUtil.hasEnchantment(itemStack, "SHARPNESS")
+     */
+    fun hasEnchantment(itemStack: ItemStack, enchantment: String): Boolean {
+        val ench = org.bukkit.enchantments.Enchantment.getByKey(namespacedKey(enchantment)) ?: return false
+        return itemStack.containsEnchantment(ench)
+    }
+
+    /**
+     * 获取所有附魔 {附魔名: 等级}
+     * JS: ItemStackUtil.getEnchantments(itemStack)
+     */
+    fun getEnchantments(itemStack: ItemStack): Map<String, Int> {
+        return itemStack.enchantments.entries.associate { (ench, level) ->
+            ench.key.toString() to level
+        }
+    }
+
+    private fun namespacedKey(name: String): org.bukkit.NamespacedKey {
+        return if (name.contains(':')) org.bukkit.NamespacedKey.fromString(name)!!
+        else org.bukkit.NamespacedKey("minecraft", name.lowercase())
+    }
+
+    // ==================== Lore ====================
+
+    /**
+     * 向 lore 追加一行（返回新物品）
+     * JS: ItemStackUtil.addLore(itemStack, "<gray>新行</gray>")
+     */
+    fun addLore(itemStack: ItemStack, line: String): ItemStack {
+        val clone = itemStack.clone()
+        val meta = clone.itemMeta ?: return clone
+        val current = meta.lore()?.toMutableList() ?: mutableListOf()
+        current.add(mmUtil.deserialize(line))
+        meta.lore(current)
+        clone.itemMeta = meta
+        return clone
+    }
+
+    /**
+     * 移除指定索引的 lore 行（返回新物品）
+     * JS: ItemStackUtil.removeLore(itemStack, 0)
+     */
+    fun removeLore(itemStack: ItemStack, index: Int): ItemStack {
+        val clone = itemStack.clone()
+        val meta = clone.itemMeta ?: return clone
+        val current = meta.lore()?.toMutableList() ?: return clone
+        if (index in current.indices) {
+            current.removeAt(index)
+            meta.lore(current)
+            clone.itemMeta = meta
+        }
+        return clone
+    }
+
+    /**
+     * 清空所有 lore（返回新物品）
+     * JS: ItemStackUtil.clearLore(itemStack)
+     */
+    fun clearLore(itemStack: ItemStack): ItemStack {
+        val clone = itemStack.clone()
+        val meta = clone.itemMeta ?: return clone
+        meta.lore(emptyList())
+        clone.itemMeta = meta
+        return clone
+    }
 }
